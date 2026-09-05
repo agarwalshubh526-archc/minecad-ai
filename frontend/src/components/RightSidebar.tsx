@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { GeometryData, LayerInfo } from '@/types';
 import { dxfColor } from '@/types';
+import { getGlossaryEntry } from '@/lib/glossary';
+import ExplainPanel from '@/components/ExplainPanel';
 
 interface RightSidebarProps {
   geometry: GeometryData | null;
@@ -13,6 +15,8 @@ interface RightSidebarProps {
   setCollapsed: (v: boolean) => void;
 }
 
+type Tab = 'properties' | 'layers' | 'explain';
+
 export default function RightSidebar({
   geometry,
   layers,
@@ -22,6 +26,9 @@ export default function RightSidebar({
   setCollapsed,
 }: RightSidebarProps) {
   const properties = geometry?.properties || {};
+  const [activeTab, setActiveTab] = useState<Tab>('properties');
+  // Mobile: tap ⓘ toggles an inline accordion per property
+  const [openInfoKey, setOpenInfoKey] = useState<string | null>(null);
 
   const toggleLayerVisibility = (name: string) => {
     setLayers(
@@ -99,7 +106,7 @@ export default function RightSidebar({
     }
 
     return (
-      <div className="space-y-3 p-3">
+      <div className="space-y-3 p-3 pb-28">
         {Object.entries(properties).map(([key, val]) => {
           if (key.startsWith('_')) return null; // skip metadata
           if (key === 'name') return null;
@@ -108,12 +115,55 @@ export default function RightSidebar({
             .replace(/_/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
           const isNum = typeof val === 'number';
+          const glossary = getGlossaryEntry(key);
+          const infoOpen = openInfoKey === key;
 
           return (
             <div key={key} className="flex flex-col gap-1">
-              <label className="text-[10px] text-[#8b949e] font-mono">
-                {label}
-              </label>
+              <div className="flex items-center gap-1 relative group/prop">
+                <label className="text-[10px] text-[#8b949e] font-mono">
+                  {label}
+                </label>
+                {glossary && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenInfoKey(infoOpen ? null : key)}
+                    className="text-[#484f58] hover:text-[#58a6ff] text-[10px] leading-none px-0.5"
+                    title={glossary.term}
+                    aria-label={`What is ${glossary.term}?`}
+                  >
+                    ⓘ
+                  </button>
+                )}
+                {/* Desktop hover tooltip (drops below the ⓘ button) */}
+                {glossary && (
+                  <div className="hidden md:block invisible opacity-0 group-hover/prop:visible group-hover/prop:opacity-100 transition-opacity absolute top-full left-0 mt-1 z-30 w-60 max-w-[240px] bg-[#161b22] border border-[#30363d] rounded-lg p-2.5 shadow-2xl pointer-events-none">
+                    <div className="text-[10px] font-bold text-[#58a6ff] font-mono mb-1">
+                      {glossary.term}
+                    </div>
+                    <div className="text-[10px] text-[#8b949e] leading-relaxed mb-1.5">
+                      {glossary.definition}
+                    </div>
+                    <div className="text-[9px] text-[#36d399] font-mono">
+                      Typical: {glossary.typical}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Mobile tap accordion */}
+              {glossary && infoOpen && (
+                <div className="md:hidden bg-[#161b22]/70 border border-[#30363d] rounded-lg p-2.5 mb-1">
+                  <div className="text-[10px] font-bold text-[#58a6ff] font-mono mb-1">
+                    {glossary.term}
+                  </div>
+                  <div className="text-[10px] text-[#8b949e] leading-relaxed mb-1.5">
+                    {glossary.definition}
+                  </div>
+                  <div className="text-[9px] text-[#36d399] font-mono">
+                    Typical: {glossary.typical}
+                  </div>
+                </div>
+              )}
               {isNum ? (
                 <input
                   type="number"
@@ -138,6 +188,116 @@ export default function RightSidebar({
     );
   };
 
+  const renderPropertiesTab = () => (
+    <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="text-[9px] uppercase tracking-wider text-[#484f58] font-bold px-3 py-2 bg-[#161b22]">
+        Parameters
+      </div>
+      {renderPropertyInputs()}
+
+      {/* Slope Stability Factor of Safety (FoS) Geotechnical Analysis */}
+      {Boolean(properties.overall_slope) && (() => {
+        const slopeInfo = computeSlopeSafetyFactor();
+        if (!slopeInfo) return null;
+        return (
+          <div className="border-t border-[#30363d] p-3 bg-[#161b22]/70 font-mono">
+            <div className="text-[10px] text-[#58a6ff] font-bold mb-1 flex items-center gap-1">
+              <span>⛰️</span>
+              <span>Slope Stability Analysis (FoS)</span>
+            </div>
+            <div className="text-[9px] text-[#8b949e] mb-2">
+              Overall Slope: {slopeInfo.slopeDeg}° | Total Height: {slopeInfo.totalH}m
+            </div>
+            <div className={`p-2 rounded border font-mono text-center text-xs font-bold ${slopeInfo.badgeBg}`}>
+              FoS = {slopeInfo.fos} ({slopeInfo.status})
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Render Survey Control Station Table if available */}
+      {Array.isArray(properties.survey_stations) && (
+        <div className="border-t border-[#30363d] p-2 bg-[#161b22]/50 font-mono">
+          <div className="text-[10px] text-[#36d399] font-bold mb-2 flex items-center gap-1">
+            <span>📐</span>
+            <span>Survey Station Coordinates</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[9px] text-left border-collapse">
+              <thead>
+                <tr className="text-[#8b949e] border-b border-[#30363d]">
+                  <th className="py-1 px-1">STN</th>
+                  <th className="py-1 px-1">Easting</th>
+                  <th className="py-1 px-1">Northing</th>
+                  <th className="py-1 px-1">Elev(Z)</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#e6edf3]">
+                {(properties.survey_stations as Array<{ station: string; easting: number; northing: number; elevation: number }>).map((stn, idx) => (
+                  <tr key={idx} className="border-b border-[#30363d]/40 hover:bg-[#21262d]">
+                    <td className="py-1 px-1 font-bold text-[#58a6ff]">{stn.station}</td>
+                    <td className="py-1 px-1">{stn.easting}</td>
+                    <td className="py-1 px-1">{stn.northing}</td>
+                    <td className="py-1 px-1 text-[#f39c12]">{stn.elevation}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderLayersTab = () => (
+    <div className="flex-1 flex flex-col bg-[#0d1117] min-h-0">
+      <div className="text-[9px] uppercase tracking-wider text-[#484f58] font-bold px-3 py-2 bg-[#161b22] border-b border-[#30363d]">
+        Layer Manager
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px] scrollbar-thin">
+        {layers.map((layer) => {
+          const hex = dxfColor(layer.color);
+          return (
+            <div
+              key={layer.name}
+              className="flex items-center justify-between px-2 py-2 md:py-1 hover:bg-[#161b22] rounded transition-colors group"
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full border border-black/30"
+                  style={{ backgroundColor: hex }}
+                />
+                <span className="text-[#e6edf3]">{layer.name}</span>
+              </div>
+              <div className="flex gap-2 opacity-80 md:opacity-60 md:group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => toggleLayerVisibility(layer.name)}
+                  className={`p-1 hover:text-white ${layer.visible ? 'text-[#58a6ff]' : 'text-[#484f58]'}`}
+                  title={layer.visible ? 'Hide layer' : 'Show layer'}
+                >
+                  {layer.visible ? '👁️' : '🕶️'}
+                </button>
+                <button
+                  onClick={() => toggleLayerLock(layer.name)}
+                  className={`p-1 hover:text-white ${layer.locked ? 'text-[#da3633]' : 'text-[#484f58]'}`}
+                  title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+                >
+                  {layer.locked ? '🔒' : '🔓'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const tabs: Array<{ id: Tab; label: string }> = [
+    { id: 'properties', label: 'Properties' },
+    { id: 'layers', label: 'Layers' },
+    { id: 'explain', label: '🎓 Explain' },
+  ];
+
   return (
     <div className="w-full md:w-64 bg-[#0d1117] border-l border-[#30363d] flex flex-col overflow-hidden select-none">
       {/* Header */}
@@ -151,107 +311,27 @@ export default function RightSidebar({
         </button>
       </div>
 
-      {/* Properties Area */}
-      <div className="flex-1 overflow-y-auto border-b border-[#30363d] scrollbar-thin">
-        <div className="text-[9px] uppercase tracking-wider text-[#484f58] font-bold px-3 py-2 bg-[#161b22]">
-          Parameters
-        </div>
-        {renderPropertyInputs()}
-
-        {/* Slope Stability Factor of Safety (FoS) Geotechnical Analysis */}
-        {Boolean(properties.overall_slope) && (() => {
-          const slopeInfo = computeSlopeSafetyFactor();
-          if (!slopeInfo) return null;
-          return (
-            <div className="border-t border-[#30363d] p-3 bg-[#161b22]/70 font-mono">
-              <div className="text-[10px] text-[#58a6ff] font-bold mb-1 flex items-center gap-1">
-                <span>⛰️</span>
-                <span>Slope Stability Analysis (FoS)</span>
-              </div>
-              <div className="text-[9px] text-[#8b949e] mb-2">
-                Overall Slope: {slopeInfo.slopeDeg}° | Total Height: {slopeInfo.totalH}m
-              </div>
-              <div className={`p-2 rounded border font-mono text-center text-xs font-bold ${slopeInfo.badgeBg}`}>
-                FoS = {slopeInfo.fos} ({slopeInfo.status})
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Render Survey Control Station Table if available */}
-        {Array.isArray(properties.survey_stations) && (
-          <div className="border-t border-[#30363d] p-2 bg-[#161b22]/50 font-mono">
-            <div className="text-[10px] text-[#36d399] font-bold mb-2 flex items-center gap-1">
-              <span>📐</span>
-              <span>Survey Station Coordinates</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-[9px] text-left border-collapse">
-                <thead>
-                  <tr className="text-[#8b949e] border-b border-[#30363d]">
-                    <th className="py-1 px-1">STN</th>
-                    <th className="py-1 px-1">Easting</th>
-                    <th className="py-1 px-1">Northing</th>
-                    <th className="py-1 px-1">Elev(Z)</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[#e6edf3]">
-                  {(properties.survey_stations as Array<{ station: string; easting: number; northing: number; elevation: number }>).map((stn, idx) => (
-                    <tr key={idx} className="border-b border-[#30363d]/40 hover:bg-[#21262d]">
-                      <td className="py-1 px-1 font-bold text-[#58a6ff]">{stn.station}</td>
-                      <td className="py-1 px-1">{stn.easting}</td>
-                      <td className="py-1 px-1">{stn.northing}</td>
-                      <td className="py-1 px-1 text-[#f39c12]">{stn.elevation}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      {/* Tab bar */}
+      <div className="flex border-b border-[#30363d] bg-[#161b22]">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 px-1 py-2 text-[10px] font-mono transition-colors ${
+              activeTab === tab.id
+                ? 'text-[#e6edf3] bg-[#0d1117] border-b-2 border-[#1f6feb]'
+                : 'text-[#8b949e] hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Layer Manager */}
-      <div className="h-64 flex flex-col bg-[#0d1117]">
-        <div className="text-[9px] uppercase tracking-wider text-[#484f58] font-bold px-3 py-2 bg-[#161b22] border-b border-[#30363d]">
-          Layer Manager
-        </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px] scrollbar-thin">
-          {layers.map((layer) => {
-            const hex = dxfColor(layer.color);
-            return (
-              <div
-                key={layer.name}
-                className="flex items-center justify-between px-2 py-2 md:py-1 hover:bg-[#161b22] rounded transition-colors group"
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-2.5 h-2.5 rounded-full border border-black/30"
-                    style={{ backgroundColor: hex }}
-                  />
-                  <span className="text-[#e6edf3]">{layer.name}</span>
-                </div>
-                <div className="flex gap-2 opacity-80 md:opacity-60 md:group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => toggleLayerVisibility(layer.name)}
-                    className={`p-1 hover:text-white ${layer.visible ? 'text-[#58a6ff]' : 'text-[#484f58]'}`}
-                    title={layer.visible ? 'Hide layer' : 'Show layer'}
-                  >
-                    {layer.visible ? '👁️' : '🕶️'}
-                  </button>
-                  <button
-                    onClick={() => toggleLayerLock(layer.name)}
-                    className={`p-1 hover:text-white ${layer.locked ? 'text-[#da3633]' : 'text-[#484f58]'}`}
-                    title={layer.locked ? 'Unlock layer' : 'Lock layer'}
-                  >
-                    {layer.locked ? '🔒' : '🔓'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Tab content */}
+      {activeTab === 'properties' && renderPropertiesTab()}
+      {activeTab === 'layers' && renderLayersTab()}
+      {activeTab === 'explain' && <ExplainPanel geometry={geometry} />}
     </div>
   );
 }

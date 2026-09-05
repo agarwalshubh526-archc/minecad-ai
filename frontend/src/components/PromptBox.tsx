@@ -18,6 +18,14 @@ const EXAMPLES = [
   'Add another level to the decline access.',
 ];
 
+// One-tap starter prompts for beginners (fill + submit immediately)
+const QUICK_CHIPS = [
+  'open pit with 5 benches 10m high',
+  'room and pillar coal mine',
+  'ventilation network for a mine',
+  'blast pattern for a quarry',
+];
+
 export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) {
   const [prompt, setPrompt] = React.useState('');
 
@@ -31,6 +39,22 @@ export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) 
 
   return (
     <div className="bg-[#161b22] border-t border-[#30363d] p-3 md:p-4 flex flex-col gap-3">
+      {/* One-tap suggestion chips */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {QUICK_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => onGenerate(chip)}
+            disabled={isGenerating}
+            className="shrink-0 text-[11px] text-[#e6edf3] bg-[#1f6feb]/20 hover:bg-[#1f6feb] border border-[#1f6feb]/50 rounded-full px-3 py-1.5 transition-colors font-mono disabled:opacity-40"
+            title={chip}
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+
       {/* Quick Examples */}
       <div>
         <div className="text-[10px] text-[#8b949e] uppercase tracking-wider font-mono font-semibold mb-2">
@@ -62,7 +86,7 @@ export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) 
                 handleSubmit(e);
               }
             }}
-            placeholder='Describe your mine layout here... (e.g. "Create an open pit mine with 8 benches, 10m height, 12m road width")'
+            placeholder='Describe your mine in plain words — e.g. "open pit with 5 benches 10m high", "room and pillar coal mine"...'
             className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-base md:text-xs text-[#e6edf3] font-mono placeholder-[#484f58] focus:border-[#1f6feb] outline-none h-14 resize-none"
           />
         </div>

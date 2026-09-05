@@ -14,6 +14,7 @@ import * as apiClient from '@/lib/apiClient';
 import * as clientGeometry from '@/lib/geometryEngine';
 import { exportPDF } from '@/lib/pdfExport';
 import LegalFooter from '@/components/LegalFooter';
+import OnboardingTour from '@/components/OnboardingTour';
 
 export default function Home() {
   // App state
@@ -718,6 +719,36 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Seed 3 sample projects on first visit (once, persisted via localStorage)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('minecad-samples-seeded')) return;
+      const samples: Array<{ name: string; object_type: string; params: Record<string, unknown> }> = [
+        { name: 'Sample: Open Pit Copper', object_type: 'open_pit',
+          params: { bench_height: 10, bench_width: 8, num_benches: 6, pit_length: 400, pit_width: 250, haul_road_width: 24, overall_slope: 50, batter_angle: 72 } },
+        { name: 'Sample: Room & Pillar Coal', object_type: 'room_and_pillar',
+          params: { room_width: 6, pillar_width: 9, num_rooms_x: 6, num_rooms_y: 4, room_height: 3, entry_width: 5 } },
+        { name: 'Sample: Longwall Panel', object_type: 'longwall_panel',
+          params: { face_width: 180, panel_length: 600, seam_height: 3.2, num_supports: 120, shearer_position: 65 } },
+      ];
+      const seeded: ProjectFile[] = samples.map((s) => {
+        const geom = clientGeometry.generateGeometry(s.object_type, s.params);
+        return {
+          id: `sample-${s.object_type}`,
+          name: s.name,
+          object_type: s.object_type,
+          created_at: new Date().toISOString(),
+          geometry: geom,
+          properties: geom.properties,
+        };
+      });
+      setProjects((prev) => [...seeded, ...prev]);
+      localStorage.setItem('minecad-samples-seeded', '1');
+    } catch (e) {
+      console.warn('Sample seeding failed:', e);
+    }
+  }, []);
+
   return (
     <div className="h-dvh w-screen flex flex-col overflow-hidden bg-[#0d1117] text-[#e6edf3]">
       {/* Top Toolbar */}
@@ -864,6 +895,7 @@ export default function Home() {
         </button>
       </div>
       <LegalFooter />
+      <OnboardingTour />
     </div>
   );
 }
