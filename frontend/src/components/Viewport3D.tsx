@@ -149,7 +149,7 @@ export default function Viewport3D({ geometry, viewMode, showSectionView, sectio
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full min-h-[280px] touch-none">
       <Canvas
         camera={{
           position: [center[0] + radius * 1.2, center[1] + radius * 0.8, center[2] + radius * 1.2],

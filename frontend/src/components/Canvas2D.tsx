@@ -30,6 +30,11 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
   const lastFitKey = useRef<string | null | undefined>(undefined);
   const cursorRafRef = useRef<number | null>(null);
 
+  // Touch gesture tracking (pointer events; mouse keeps the existing path)
+  const touchPointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ startDist: number; startScale: number; startTx: number; startTy: number } | null>(null);
+  const tapRef = useRef<{ id: number; x: number; y: number; t: number; dragged: boolean } | null>(null);
+
   // Visible layer set (memoized — it feeds draw()'s dependency array)
   const visibleLayers = useMemo(
     () => new Set(layers.filter(l => l.visible).map(l => l.name)),
@@ -368,15 +373,19 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
   }, [draw]);
 
   // Mouse handlers (wheel zoom is attached as a non-passive native listener above)
+  const addMeasurePoint = useCallback(() => {
+    const point = { x: cursorWorldRef.current.x, y: cursorWorldRef.current.y };
+    if (activeTool === 'distance' && measurePoints.length >= 2) {
+      setMeasurePoints([point]);
+    } else {
+      setMeasurePoints(prev => [...prev, point]);
+    }
+  }, [activeTool, measurePoints.length]);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) {
       if (activeTool === 'distance' || activeTool === 'area' || activeTool === 'coordinate') {
-        const point = { x: cursorWorldRef.current.x, y: cursorWorldRef.current.y };
-        if (activeTool === 'distance' && measurePoints.length >= 2) {
-          setMeasurePoints([point]);
-        } else {
-          setMeasurePoints(prev => [...prev, point]);
-        }
+        addMeasurePoint();
         return;
       }
       setIsDragging(true);
@@ -411,6 +420,113 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
     }
   };
 
+  // ── Touch gestures (pointer events; `touch-action: none` on the canvas) ──
+  // Single-finger drag = pan (pan tool only), two-finger pinch = zoom at the
+  // pinch midpoint, tap = same as a click for the measure tools.
+  const updateCursorWorldFromClient = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
+    cursorWorldRef.current = {
+      x: (mx - rect.width / 2 - transform.x) / transform.scale,
+      y: -(my - rect.height / 2 - transform.y) / transform.scale,
+    };
+    if (cursorRafRef.current === null) {
+      cursorRafRef.current = requestAnimationFrame(() => {
+        cursorRafRef.current = null;
+        setCursorWorld(cursorWorldRef.current);
+      });
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse' || !canvasRef.current) return;
+    e.preventDefault(); // suppress synthesized mouse events from the touch
+    canvasRef.current.setPointerCapture(e.pointerId);
+    const rect = canvasRef.current.getBoundingClientRect();
+    touchPointersRef.current.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    if (touchPointersRef.current.size === 2) {
+      // Second finger → pinch zoom; cancel any pending tap
+      tapRef.current = null;
+      setIsDragging(false);
+      const [p1, p2] = [...touchPointersRef.current.values()];
+      pinchRef.current = {
+        startDist: Math.hypot(p2.x - p1.x, p2.y - p1.y),
+        startScale: transform.scale,
+        startTx: transform.x,
+        startTy: transform.y,
+      };
+    } else if (touchPointersRef.current.size === 1) {
+      tapRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), dragged: false };
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse') return;
+    if (!touchPointersRef.current.has(e.pointerId)) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    touchPointersRef.current.set(e.pointerId, pos);
+    updateCursorWorldFromClient(e.clientX, e.clientY);
+
+    if (touchPointersRef.current.size === 2 && pinchRef.current && pinchRef.current.startDist > 0) {
+      const [p1, p2] = [...touchPointersRef.current.values()];
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const { startDist, startScale, startTx, startTy } = pinchRef.current;
+      const newScale = Math.max(0.01, Math.min(50, startScale * (dist / startDist)));
+      const ratio = newScale / startScale;
+      hasUserTransformed.current = true;
+      setTransform({
+        scale: newScale,
+        x: midX - ratio * (midX - cx - startTx) - cx,
+        y: midY - ratio * (midY - cy - startTy) - cy,
+      });
+      return;
+    }
+
+    const tap = tapRef.current;
+    if (touchPointersRef.current.size === 1 && tap && tap.id === e.pointerId) {
+      if (!tap.dragged && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 8) {
+        tap.dragged = true;
+        if (activeTool === 'pan') {
+          setIsDragging(true);
+          setLastMouse({ x: e.clientX, y: e.clientY });
+        }
+      }
+      if (tap.dragged && activeTool === 'pan') {
+        hasUserTransformed.current = true;
+        const dx = e.clientX - lastMouse.x;
+        const dy = e.clientY - lastMouse.y;
+        setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+        setLastMouse({ x: e.clientX, y: e.clientY });
+      }
+    }
+  };
+
+  const handlePointerEnd = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse') return;
+    e.preventDefault(); // suppress synthesized mouse events from the touch
+    touchPointersRef.current.delete(e.pointerId);
+    if (touchPointersRef.current.size < 2) pinchRef.current = null;
+    if (touchPointersRef.current.size === 0) setIsDragging(false);
+
+    const tap = tapRef.current;
+    if (tap && tap.id === e.pointerId) {
+      tapRef.current = null;
+      if (!tap.dragged && Date.now() - tap.t < 500 && activeTool !== 'pan') {
+        addMeasurePoint();
+      }
+    }
+  };
+
   // Cancel any pending cursor update on unmount
   useEffect(() => {
     return () => {
@@ -426,28 +542,28 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
       <div className="absolute top-3 left-3 bg-[#161b22]/95 border border-[#30363d] rounded-lg p-1 flex items-center gap-1 z-30 shadow-xl font-mono text-[11px]">
         <button
           onClick={() => { setActiveTool('pan'); setMeasurePoints([]); }}
-          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'pan' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'pan' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
         >
           <span>🔍</span>
           <span>Pan/Inspect</span>
         </button>
         <button
           onClick={() => { setActiveTool('coordinate'); setMeasurePoints([]); }}
-          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'coordinate' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'coordinate' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
         >
           <span>📍</span>
           <span>XY Easting/Northing</span>
         </button>
         <button
           onClick={() => { setActiveTool('distance'); setMeasurePoints([]); }}
-          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'distance' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'distance' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
         >
           <span>📏</span>
           <span>Distance Tape</span>
         </button>
         <button
           onClick={() => { setActiveTool('area'); setMeasurePoints([]); }}
-          className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'area' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'area' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
         >
           <span>📐</span>
           <span>Polygon Area</span>
@@ -470,11 +586,15 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
 
       <canvas
         ref={canvasRef}
-        className="w-full h-full block cursor-crosshair"
+        className="w-full h-full block cursor-crosshair touch-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
       />
 
       {/* Coordinate bar */}

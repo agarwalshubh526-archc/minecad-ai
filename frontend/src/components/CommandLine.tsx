@@ -33,7 +33,7 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
         ref={containerRef}
         className="flex-1 p-3 overflow-y-auto font-mono text-xs text-[#8b949e] space-y-1 select-text scrollbar-thin"
       >
-        <div className="text-[#30363d] border-b border-[#30363d]/50 pb-1 mb-2 flex items-center justify-between">
+        <div className="text-[#30363d] border-b border-[#30363d]/50 pb-1 mb-2 flex items-center justify-between flex-wrap gap-1">
           <span>MineCAD AI CLI Terminal Console v1.1.0</span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
             activeProvider === 'deepseek'
@@ -49,10 +49,10 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
           else if (line.startsWith('Success:')) style = 'text-[#3fb950]';
           else if (line.startsWith('Error:')) style = 'text-[#f85149]';
           else if (line.startsWith('System:')) style = 'text-[#d38aea]';
-          else if (line.startsWith('DeepSeek:')) style = 'text-[#36d399] bg-[#052e16]/30 px-1 py-0.5 rounded border-l-2 border-[#36d399] whitespace-pre-wrap';
+          else if (line.startsWith('DeepSeek:')) style = 'text-[#36d399] bg-[#052e16]/30 px-1 py-0.5 rounded border-l-2 border-[#36d399]';
 
           return (
-            <div key={idx} className={style}>
+            <div key={idx} className={`${style} whitespace-pre-wrap break-words`}>
               {line}
             </div>
           );
@@ -60,8 +60,8 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
       </div>
 
       {/* CLI Input Line */}
-      <div className="h-8 bg-[#161b22] border-t border-[#30363d] flex items-center px-3 gap-2">
-        <span className="font-mono text-xs text-[#58a6ff] select-none font-bold">
+      <div className="h-9 md:h-8 bg-[#161b22] border-t border-[#30363d] flex items-center px-3 gap-2">
+        <span className="font-mono text-xs text-[#58a6ff] select-none font-bold shrink-0">
           Command:
         </span>
         <input
@@ -69,7 +69,7 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent text-xs text-[#e6edf3] font-mono outline-none border-none"
+          className="flex-1 min-w-0 bg-transparent text-base md:text-xs text-[#e6edf3] font-mono outline-none border-none"
           placeholder='Type command or "deepseek <query>" (e.g., "deepseek how to design bench height", "bench_height 12", "help")'
         />
       </div>

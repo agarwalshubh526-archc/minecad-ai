@@ -31,17 +31,17 @@ export default function Toolbar({
   const [showAiSettings, setShowAiSettings] = React.useState(false);
 
   return (
-    <div className="h-11 bg-[#161b22] border-b border-[#30363d] flex items-center px-3 gap-1 select-none relative z-50">
+    <div className="h-11 bg-[#161b22] border-b border-[#30363d] flex items-center px-3 gap-1 select-none relative z-50 overflow-x-auto">
       {/* Logo */}
-      <div className="flex items-center gap-2 mr-4 pr-4 border-r border-[#30363d]">
+      <div className="flex items-center gap-2 mr-4 pr-4 border-r border-[#30363d] shrink-0">
         <div className="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-[10px] font-bold text-black">
           M
         </div>
-        <span className="text-sm font-semibold text-[#e6edf3] tracking-wide">MineCAD AI</span>
+        <span className="text-sm font-semibold text-[#e6edf3] tracking-wide hidden sm:inline">MineCAD AI</span>
       </div>
 
       {/* View Toggle */}
-      <div className="flex bg-[#0d1117] rounded-md border border-[#30363d] overflow-hidden mr-2">
+      <div className="flex bg-[#0d1117] rounded-md border border-[#30363d] overflow-hidden mr-2 shrink-0">
         <button
           className={`px-3 py-1 text-xs font-mono transition-colors ${activeView === '2d' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:text-white'}`}
           onClick={() => setActiveView('2d')}
@@ -58,25 +58,31 @@ export default function Toolbar({
 
       {/* 3D View controls */}
       {activeView === '3d' && (
-        <div className="flex items-center gap-1 mr-2 pl-2 border-l border-[#30363d]">
+        <div className="flex items-center gap-1 mr-2 pl-2 border-l border-[#30363d] shrink-0">
           <button
             className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${viewMode3D === 'solid' ? 'bg-[#238636] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
             onClick={() => setViewMode3D('solid')}
+            title="Solid view"
           >
-            Solid
+            <span className="md:hidden">◼</span>
+            <span className="hidden md:inline">Solid</span>
           </button>
           <button
             className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${viewMode3D === 'wireframe' ? 'bg-[#238636] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
             onClick={() => setViewMode3D('wireframe')}
+            title="Wireframe view"
           >
-            Wire
+            <span className="md:hidden">△</span>
+            <span className="hidden md:inline">Wire</span>
           </button>
           <div className="w-px h-5 bg-[#30363d] mx-1" />
           <button
             className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${showSectionView ? 'bg-[#da3633] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
             onClick={() => setShowSectionView(!showSectionView)}
+            title="Section view"
           >
-            Section
+            <span className="md:hidden">✂</span>
+            <span className="hidden md:inline">Section</span>
           </button>
           {showSectionView && (
             <input
@@ -104,13 +110,14 @@ export default function Toolbar({
 
       {/* Export & Survey Data buttons */}
       {geometry && (
-        <div className="flex items-center gap-1 mr-2 pr-2 border-r border-[#30363d]">
-          <span className="text-[10px] text-[#484f58] mr-1 font-mono">Export:</span>
+        <div className="flex items-center gap-1 mr-2 pr-2 border-r border-[#30363d] shrink-0">
+          <span className="text-[10px] text-[#484f58] mr-1 font-mono hidden md:inline">Export:</span>
           {['DXF', 'SVG', 'PDF', 'OBJ', 'STL'].map(fmt => (
             <button
               key={fmt}
               onClick={() => onExport(fmt.toLowerCase())}
-              className="px-2 py-0.5 text-[10px] text-[#8b949e] hover:text-white hover:bg-[#21262d] rounded font-mono transition-colors"
+              title={`Export ${fmt}`}
+              className="px-1.5 md:px-2 py-0.5 text-[10px] text-[#8b949e] hover:text-white hover:bg-[#21262d] rounded font-mono transition-colors"
             >
               {fmt}
             </button>
@@ -136,7 +143,7 @@ export default function Toolbar({
               className="px-2 py-0.5 text-[10px] text-[#36d399] hover:bg-[#052e16] rounded font-mono transition-colors border border-[#15803d]"
               title="Download Survey Stations CSV"
             >
-              CSV Data
+              CSV<span className="hidden md:inline"> Data</span>
             </button>
           )}
         </div>
@@ -145,17 +152,17 @@ export default function Toolbar({
       {/* AI Config */}
       <button
         onClick={() => setShowAiSettings(!showAiSettings)}
-        className={`px-2 py-1 text-[10px] rounded font-mono transition-colors flex items-center gap-1 ${
+        className={`px-2 py-1 text-[10px] rounded font-mono transition-colors flex items-center gap-1 shrink-0 ${
           showAiSettings ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'
         }`}
       >
         <span>⚙️</span>
-        <span>AI: {aiConfig.provider}</span>
+        <span className="hidden md:inline">AI: {aiConfig.provider}</span>
       </button>
 
       {/* AI Settings Dropdown */}
       {showAiSettings && (
-        <div className="absolute top-full right-3 mt-1 w-80 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl p-4 z-[100]">
+        <div className="absolute top-full right-3 mt-1 w-[calc(100vw-1.5rem)] max-w-80 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl p-4 z-[100]">
           <h3 className="text-xs font-semibold text-[#e6edf3] mb-3">AI Configuration</h3>
           
           <label className="block text-[10px] text-[#8b949e] mb-1">Provider</label>

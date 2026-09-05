@@ -30,7 +30,7 @@ export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) 
   };
 
   return (
-    <div className="bg-[#161b22] border-t border-[#30363d] p-4 flex flex-col gap-3">
+    <div className="bg-[#161b22] border-t border-[#30363d] p-3 md:p-4 flex flex-col gap-3">
       {/* Quick Examples */}
       <div>
         <div className="text-[10px] text-[#8b949e] uppercase tracking-wider font-mono font-semibold mb-2">
@@ -63,13 +63,13 @@ export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) 
               }
             }}
             placeholder='Describe your mine layout here... (e.g. "Create an open pit mine with 8 benches, 10m height, 12m road width")'
-            className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#e6edf3] font-mono placeholder-[#484f58] focus:border-[#1f6feb] outline-none h-14 resize-none"
+            className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-base md:text-xs text-[#e6edf3] font-mono placeholder-[#484f58] focus:border-[#1f6feb] outline-none h-14 resize-none"
           />
         </div>
         <button
           type="submit"
           disabled={!prompt.trim() || isGenerating}
-          className="bg-[#238636] hover:bg-[#2ea043] disabled:bg-[#238636]/40 disabled:text-[#8b949e]/40 text-white text-xs font-semibold rounded-lg px-5 flex flex-col justify-center items-center font-mono transition-colors"
+          className="bg-[#238636] hover:bg-[#2ea043] disabled:bg-[#238636]/40 disabled:text-[#8b949e]/40 text-white text-xs font-semibold rounded-lg px-3 md:px-5 shrink-0 flex flex-col justify-center items-center font-mono transition-colors"
         >
           {isGenerating ? (
             <div className="flex items-center gap-1">

@@ -121,14 +121,14 @@ export default function RightSidebar({
                   onChange={(e) =>
                     handleParamChange(key, parseFloat(e.target.value) || 0)
                   }
-                  className="bg-[#0d1117] border border-[#30363d] rounded text-xs text-[#e6edf3] font-mono px-2 py-1.5 focus:border-[#1f6feb] outline-none"
+                  className="bg-[#0d1117] border border-[#30363d] rounded text-base md:text-xs text-[#e6edf3] font-mono px-2 py-1.5 focus:border-[#1f6feb] outline-none"
                 />
               ) : (
                 <input
                   type="text"
                   value={val as string}
                   onChange={(e) => handleParamChange(key, e.target.value)}
-                  className="bg-[#0d1117] border border-[#30363d] rounded text-xs text-[#e6edf3] font-mono px-2 py-1.5 focus:border-[#1f6feb] outline-none"
+                  className="bg-[#0d1117] border border-[#30363d] rounded text-base md:text-xs text-[#e6edf3] font-mono px-2 py-1.5 focus:border-[#1f6feb] outline-none"
                 />
               )}
             </div>
@@ -222,7 +222,7 @@ export default function RightSidebar({
             return (
               <div
                 key={layer.name}
-                className="flex items-center justify-between px-2 py-1 hover:bg-[#161b22] rounded transition-colors group"
+                className="flex items-center justify-between px-2 py-2 md:py-1 hover:bg-[#161b22] rounded transition-colors group"
               >
                 <div className="flex items-center gap-2">
                   <div
@@ -231,17 +231,17 @@ export default function RightSidebar({
                   />
                   <span className="text-[#e6edf3]">{layer.name}</span>
                 </div>
-                <div className="flex gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-2 opacity-80 md:opacity-60 md:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => toggleLayerVisibility(layer.name)}
-                    className={`hover:text-white ${layer.visible ? 'text-[#58a6ff]' : 'text-[#484f58]'}`}
+                    className={`p-1 hover:text-white ${layer.visible ? 'text-[#58a6ff]' : 'text-[#484f58]'}`}
                     title={layer.visible ? 'Hide layer' : 'Show layer'}
                   >
                     {layer.visible ? '👁️' : '🕶️'}
                   </button>
                   <button
                     onClick={() => toggleLayerLock(layer.name)}
-                    className={`hover:text-white ${layer.locked ? 'text-[#da3633]' : 'text-[#484f58]'}`}
+                    className={`p-1 hover:text-white ${layer.locked ? 'text-[#da3633]' : 'text-[#484f58]'}`}
                     title={layer.locked ? 'Unlock layer' : 'Lock layer'}
                   >
                     {layer.locked ? '🔒' : '🔓'}

@@ -40,6 +40,10 @@ export default function Home() {
   // Sidebar toggles
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  // Mobile slide-over drawers (closed by default; never rendered during SSR
+  // beyond this so there's no hydration mismatch)
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
   // Load a mining template to initialize the workspace
   const handleLoadTemplate = async (template: MineTemplateType) => {
@@ -715,7 +719,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#0d1117] text-[#e6edf3]">
+    <div className="h-dvh w-screen flex flex-col overflow-hidden bg-[#0d1117] text-[#e6edf3]">
       {/* Top Toolbar */}
       <Toolbar
         activeView={activeView}
@@ -735,20 +739,43 @@ export default function Home() {
 
       {/* Main workspace layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <LeftSidebar
-          projects={projects}
-          selectedProject={selectedProject}
-          onSelectProject={handleSelectProject}
-          onLoadTemplate={handleLoadTemplate}
-          collapsed={leftCollapsed}
-          setCollapsed={setLeftCollapsed}
-        />
+        {/* Left Sidebar — in-flow 3-pane on md+, hidden on mobile (see drawer below) */}
+        <div className="hidden md:flex shrink-0 flex-col">
+          <LeftSidebar
+            projects={projects}
+            selectedProject={selectedProject}
+            onSelectProject={handleSelectProject}
+            onLoadTemplate={handleLoadTemplate}
+            collapsed={leftCollapsed}
+            setCollapsed={setLeftCollapsed}
+          />
+        </div>
+
+        {/* Mobile drawer: project files / templates */}
+        {leftDrawerOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              onClick={() => setLeftDrawerOpen(false)}
+              aria-hidden
+            />
+            <div className="fixed inset-y-0 left-0 z-50 flex w-[85vw] max-w-80 flex-col bg-[#0d1117] border-r border-[#30363d] shadow-2xl md:hidden">
+              <LeftSidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                onSelectProject={(p) => { handleSelectProject(p); setLeftDrawerOpen(false); }}
+                onLoadTemplate={(t) => { handleLoadTemplate(t); setLeftDrawerOpen(false); }}
+                collapsed={false}
+                setCollapsed={() => setLeftDrawerOpen(false)}
+              />
+            </div>
+          </>
+        )}
 
         {/* Center Viewports + CLI / AI Box */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117] min-w-0">
           {/* Canvas area */}
-          <div className="flex-1 relative bg-[#0d1117] border-b border-[#30363d]">
+          <div className="flex-1 relative bg-[#0d1117] border-b border-[#30363d] min-h-[280px]">
             {activeView === '2d' ? (
               <Canvas2D
                 geometry={geometry}
@@ -779,15 +806,62 @@ export default function Home() {
           />
         </div>
 
-        {/* Right Properties Panel */}
-        <RightSidebar
-          geometry={geometry}
-          layers={layers}
-          setLayers={setLayers}
-          onUpdateParams={handleUpdateProperties}
-          collapsed={rightCollapsed}
-          setCollapsed={setRightCollapsed}
-        />
+        {/* Right Properties Panel — in-flow 3-pane on md+, hidden on mobile */}
+        <div className="hidden md:flex shrink-0 flex-col">
+          <RightSidebar
+            geometry={geometry}
+            layers={layers}
+            setLayers={setLayers}
+            onUpdateParams={handleUpdateProperties}
+            collapsed={rightCollapsed}
+            setCollapsed={setRightCollapsed}
+          />
+        </div>
+
+        {/* Mobile drawer: properties / layers */}
+        {rightDrawerOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              onClick={() => setRightDrawerOpen(false)}
+              aria-hidden
+            />
+            <div className="fixed inset-y-0 right-0 z-50 flex w-[85vw] max-w-80 flex-col bg-[#0d1117] border-l border-[#30363d] shadow-2xl md:hidden">
+              <RightSidebar
+                geometry={geometry}
+                layers={layers}
+                setLayers={setLayers}
+                onUpdateParams={handleUpdateProperties}
+                collapsed={false}
+                setCollapsed={() => setRightDrawerOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Floating mobile drawer toggles */}
+        <button
+          onClick={() => {
+            if (!leftDrawerOpen) setLeftCollapsed(false);
+            setLeftDrawerOpen((v) => !v);
+          }}
+          className="md:hidden fixed top-14 left-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#161b22] border border-[#30363d] text-lg text-[#e6edf3] shadow-lg active:bg-[#21262d]"
+          title="Projects & templates"
+          aria-label={leftDrawerOpen ? 'Close projects panel' : 'Open projects and templates'}
+        >
+          {leftDrawerOpen ? '✕' : '☰'}
+        </button>
+        <button
+          onClick={() => {
+            if (!rightDrawerOpen) setRightCollapsed(false);
+            setRightDrawerOpen((v) => !v);
+          }}
+          className="md:hidden fixed top-14 right-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#161b22] border border-[#30363d] text-lg text-[#e6edf3] shadow-lg active:bg-[#21262d]"
+          title="Properties & layers"
+          aria-label={rightDrawerOpen ? 'Close properties panel' : 'Open properties and layers'}
+        >
+          {rightDrawerOpen ? '✕' : '🎚️'}
+        </button>
       </div>
       <LegalFooter />
     </div>
