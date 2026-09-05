@@ -38,6 +38,10 @@ Frontend:
 - `NEXT_PUBLIC_API_URL` — direct API base override in `src/lib/apiClient.ts`; defaults to `http://localhost:8000` (or the rewrite path when unset in production).
 - AI provider, model, base URL, and API key are chosen in the UI and passed per-request (`ai_provider`, `ai_model`, `ai_base_url`, `ai_api_key`) — there are no server-side AI env vars.
 
+## PWA
+
+The frontend is an installable, offline-capable Progressive Web App. After the first visit the app shell is cached by a hand-rolled service worker (`frontend/public/sw.js`), so MineCAD AI can be installed on mobile or desktop and keeps working with no network connection — the local (rule-based) AI provider generates all geometry client-side. Only AI-provider API calls and backend exports require connectivity, and those requests are never cached.
+
 ## Deployment
 
 - **Frontend**: Vercel (repo root = `frontend/`); set `NEXT_PUBLIC_BACKEND_URL` to the Railway URL.
