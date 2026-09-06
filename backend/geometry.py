@@ -31,12 +31,62 @@ def make_hatch(points: List[Tuple[float, float]], pattern: str = "ANSI31", layer
     return {"type": "hatch", "points": [{"x": p[0], "y": p[1]} for p in points], "pattern": pattern, "layer": layer, "color": color}
 
 
-# ─── 3D Mesh Helpers ──────────────────────────────────────────────────────────
+# ─── Mine Design Language Palette (mirrored in frontend geometryEngine.ts) ───
 
-def make_mesh(vertices: List[List[float]], indices: List[List[int]], color: str = "#4a9eff", name: str = "mesh") -> Dict:
-    return {"type": "mesh", "vertices": vertices, "indices": indices, "color": color, "name": name}
+MINE_COLORS = {
+    "waste_bench": ["#9C8D78", "#90826E", "#847763", "#786B58", "#6D604E", "#625644"],
+    "pit_floor": "#5A5244",
+    "haul_road": "#9A8A70",
+    "coal_seam": "#1C1C1E",
+    "sandstone": "#C9B18A",
+    "overburden": "#8A6F4D",
+    "mudstone": "#6E6259",
+    "pillar_rock": "#7A6B5D",
+    "roof_rock": "#4E463C",
+    "floor_rock": "#5C5347",
+    "roadway_gravel": "#6E6257",
+    "duct_steel": "#5F7D8C",
+    "equipment_yellow": "#F5A623",
+    "equipment_orange": "#E67E22",
+    "tunnel_grey": "#5A6470",
+    "level_grey": "#6B7078",
+    "terrain_low": "#6E7A4A",
+    "terrain_high": "#8A9159",
+    "gateroad": "#4A4A52",
+    "goaf": "#3A352F",
+    "cut_volume": "#8A5A44",
+    "spoil_dump": "#7E8B5A",
+    "concrete": "#8A8F94",
+    "trestle_steel": "#7C8288",
+    "blast_hole": "#C0392B",
+    "survey_control": "#E74C3C",
+    "survey_station": "#F39C12",
+    "conveyor_belt": "#3A3A3E",
+}
 
-def create_box_mesh(x: float, y: float, z: float, w: float, d: float, h: float, color: str = "#4a9eff") -> Dict:
+C = MINE_COLORS
+
+
+def _shade(hex_color: str, f: float) -> str:
+    """Multiply a #RRGGBB color by a factor (per-channel, clamped)."""
+    n = int(hex_color.lstrip("#"), 16)
+    r = min(255, round(((n >> 16) & 255) * f))
+    g = min(255, round(((n >> 8) & 255) * f))
+    b = min(255, round((n & 255) * f))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def make_mesh(vertices: List[List[float]], indices: List[List[int]], color: str = "#4a9eff",
+              name: str = "mesh", layer: Optional[str] = None) -> Dict:
+    m = {"type": "mesh", "vertices": vertices, "indices": indices, "color": color, "name": name}
+    if layer:
+        m["layer"] = layer
+    return m
+
+
+def create_box_mesh(x: float, y: float, z: float, w: float, d: float, h: float,
+                    color: str = "#4a9eff", layer: Optional[str] = None,
+                    name: Optional[str] = None) -> Dict:
     """Create a box mesh at position (x,y,z) with dimensions (w,d,h)."""
     verts = [
         [x, y, z], [x+w, y, z], [x+w, y+d, z], [x, y+d, z],
@@ -50,7 +100,180 @@ def create_box_mesh(x: float, y: float, z: float, w: float, d: float, h: float, 
         [0,3,7], [0,7,4],  # left
         [1,5,6], [1,6,2],  # right
     ]
-    return make_mesh(verts, faces, color, f"box_{x}_{y}_{z}")
+    return make_mesh(verts, faces, color, name or f"box_{x}_{y}_{z}", layer)
+
+
+def _push_quad(verts, faces, a, b, c, d):
+    """Quad a→b→c→d (CCW from outside) as two triangles with dedicated vertices."""
+    base = len(verts)
+    verts.extend([list(a), list(b), list(c), list(d)])
+    faces.extend([[base, base + 1, base + 2], [base, base + 2, base + 3]])
+
+
+def create_inclined_box_mesh(x1, y1, z1, x2, y2, z2, w, h, color, name, layer=None) -> Dict:
+    """Box with inclined bottom A(z1)→B(z2) and parallel top (+h). Width w is
+    perpendicular to the plan direction. Used for conveyors and declines."""
+    dx, dy = x2 - x1, y2 - y1
+    length = math.hypot(dx, dy) or 1.0
+    px, py = -dy / length * (w / 2), dx / length * (w / 2)
+    am = [x1 - px, y1 - py, z1]
+    ap = [x1 + px, y1 + py, z1]
+    bm = [x2 - px, y2 - py, z2]
+    bp = [x2 + px, y2 + py, z2]
+
+    def up(p):
+        return [p[0], p[1], p[2] + h]
+
+    verts: List[List[float]] = []
+    faces: List[List[int]] = []
+    _push_quad(verts, faces, up(am), up(bm), up(bp), up(ap))  # top
+    _push_quad(verts, faces, bm, am, ap, bp)                 # bottom
+    _push_quad(verts, faces, bp, bm, up(bm), up(bp))         # front
+    _push_quad(verts, faces, am, ap, up(ap), up(am))         # back
+    _push_quad(verts, faces, ap, bp, up(bp), up(ap))         # left
+    _push_quad(verts, faces, bm, am, up(am), up(bm))         # right
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def create_cylinder_mesh(cx, cy, z0, z1, r, segments, color, name, layer=None) -> Dict:
+    """Vertical cylinder between z0 (bottom) and z1 (top), axis at (cx, cy)."""
+    verts: List[List[float]] = [[cx, cy, z0], [cx, cy, z1]]
+    cb, ct = 0, 1
+    ring0 = len(verts)
+    for i in range(segments):
+        a = (i / segments) * 2 * math.pi
+        verts.append([cx + math.cos(a) * r, cy + math.sin(a) * r, z0])
+    ring1 = len(verts)
+    for i in range(segments):
+        a = (i / segments) * 2 * math.pi
+        verts.append([cx + math.cos(a) * r, cy + math.sin(a) * r, z1])
+    faces: List[List[int]] = []
+    for i in range(segments):
+        j = (i + 1) % segments
+        faces.append([ring0 + i, ring0 + j, ring1 + j])
+        faces.append([ring0 + i, ring1 + j, ring1 + i])
+    for i in range(segments):
+        j = (i + 1) % segments
+        faces.append([cb, ring0 + j, ring0 + i])
+        faces.append([ct, ring1 + i, ring1 + j])
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def create_extrude_xz_mesh(xz, y0, y1, color, name, layer=None) -> Dict:
+    """Extrude a closed convex X-Z polygon along plan-y from y0 to y1."""
+    n = len(xz)
+    verts = [[x, y0, z] for x, z in xz] + [[x, y1, z] for x, z in xz]
+    faces = []
+    for i in range(1, n - 1):
+        faces.append([0, i, i + 1])
+    for i in range(1, n - 1):
+        faces.append([n, n + i + 1, n + i])
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append([i, j, n + j])
+        faces.append([i, n + j, n + i])
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def _rect_corners(r):
+    x1, y1, x2, y2 = r
+    return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+
+
+def create_frustum_ring_mesh(outer, z_top, inner, z_bot, color, name, layer=None) -> Dict:
+    """Four sloped batter faces from an outer (crest) rectangle at z_top to a
+    smaller concentric inner (toe) rectangle at z_bot. Equal rects give a
+    vertical ring (pit exterior skirt)."""
+    o = _rect_corners(outer)
+    i = _rect_corners(inner)
+    verts: List[List[float]] = []
+    faces: List[List[int]] = []
+    for s in range(4):
+        t = (s + 1) % 4
+        _push_quad(verts, faces,
+                   [o[s][0], o[s][1], z_top], [o[t][0], o[t][1], z_top],
+                   [i[t][0], i[t][1], z_bot], [i[s][0], i[s][1], z_bot])
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def create_flat_ring_mesh(inner, outer, z, color, name, layer=None) -> Dict:
+    """Horizontal band between two concentric rectangles (bench berm)."""
+    o = _rect_corners(outer)
+    i = _rect_corners(inner)
+    verts: List[List[float]] = []
+    faces: List[List[int]] = []
+    for s in range(4):
+        t = (s + 1) % 4
+        _push_quad(verts, faces,
+                   [o[s][0], o[s][1], z], [o[t][0], o[t][1], z],
+                   [i[t][0], i[t][1], z], [i[s][0], i[s][1], z])
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def create_flat_rect_mesh(r, z, color, name, layer=None) -> Dict:
+    """Filled horizontal rectangle at a fixed height (pit floor)."""
+    c = _rect_corners(r)
+    return make_mesh(
+        [[p[0], p[1], z] for p in c],
+        [[0, 3, 2], [0, 2, 1]],
+        color, name, layer,
+    )
+
+
+def create_ramp_ribbon_mesh(stations, skirt, color, name, layer=None) -> Dict:
+    """Haul-road ramp ribbon descending between stations, with side skirts."""
+    verts: List[List[float]] = []
+    faces: List[List[int]] = []
+    for i in range(len(stations) - 1):
+        s, t = stations[i], stations[i + 1]
+        _push_quad(verts, faces,
+                   [s["x1"], s["y1"], s["z"]], [t["x1"], t["y1"], t["z"]],
+                   [t["x2"], t["y2"], t["z"]], [s["x2"], s["y2"], s["z"]])
+        _push_quad(verts, faces,
+                   [t["x1"], t["y1"], t["z"]], [s["x1"], s["y1"], s["z"]],
+                   [s["x1"], s["y1"], s["z"] - skirt], [t["x1"], t["y1"], t["z"] - skirt])
+        _push_quad(verts, faces,
+                   [s["x2"], s["y2"], s["z"]], [t["x2"], t["y2"], t["z"]],
+                   [t["x2"], t["y2"], t["z"] - skirt], [s["x2"], s["y2"], s["z"] - skirt])
+    return make_mesh(verts, faces, color, name, layer)
+
+
+def create_heightfield_meshes(w, h, nx, ny, height_at, z_split,
+                              low_color, high_color, name) -> List[Dict]:
+    """Triangulated heightfield split into two tone bands at z_split."""
+    verts: List[List[float]] = []
+    for j in range(ny + 1):
+        for i in range(nx + 1):
+            x, y = (i / nx) * w, (j / ny) * h
+            verts.append([x, y, height_at(x, y)])
+
+    def idx(i, j):
+        return j * (nx + 1) + i
+
+    low_v, low_f, high_v, high_f = [], [], [], []
+    low_remap: Dict[int, int] = {}
+    high_remap: Dict[int, int] = {}
+
+    def take(target, remap, k):
+        if k not in remap:
+            remap[k] = len(target)
+            target.append(verts[k])
+        return remap[k]
+
+    for j in range(ny):
+        for i in range(nx):
+            a, b, c, d = idx(i, j), idx(i + 1, j), idx(i + 1, j + 1), idx(i, j + 1)
+            for tri in ((a, c, b), (a, d, c)):
+                avg = (verts[tri[0]][2] + verts[tri[1]][2] + verts[tri[2]][2]) / 3
+                if avg >= z_split:
+                    v, f, r = high_v, high_f, high_remap
+                else:
+                    v, f, r = low_v, low_f, low_remap
+                f.append([take(v, r, tri[0]), take(v, r, tri[1]), take(v, r, tri[2])])
+    return [
+        make_mesh(low_v, low_f, low_color, f"{name}_low", "TERRAIN"),
+        make_mesh(high_v, high_f, high_color, f"{name}_high", "TERRAIN"),
+    ]
 
 
 # ─── Open Pit Mine Generator ─────────────────────────────────────────────────
@@ -134,7 +357,7 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         if tx2 > tx1 and ty2 > ty1:
             toe_pts = [(tx1, ty1), (tx2, ty1), (tx2, ty2), (tx1, ty2)]
             primitives_2d.append(make_polyline(toe_pts, closed=True, layer=layer_toe, color=5))
-            bench_outlines_toe.append(toe_pts)
+        bench_outlines_toe.append((tx1, ty1, tx2, ty2))
 
         # Bench label
         primitives_2d.append(make_text(cx2 + 5, (cy1 + cy2) / 2, f"Bench {i+1}", 2.0, layer_text, 7))
@@ -204,44 +427,63 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         dim_x = berm_x - 10
         primitives_2d.append(make_dimension(dim_x, sy - i * bench_height, dim_x, sy - (i+1) * bench_height, f"{bench_height} m", layer_dims))
 
-    # ── 3D Meshes ──
-    colors_bench = ["#5B8C5A", "#4A7A4A", "#3D6B3D", "#2F5C2F", "#1E4D1E"]
-    for i in range(num_benches):
-        offset = i * total_setback
-        bx = -pit_length / 2 + offset
-        by = -pit_width / 2 + offset
-        bw = pit_length - 2 * offset
-        bd = pit_width - 2 * offset
-        if bw <= 0 or bd <= 0:
-            break
-        z = -i * bench_height
-        color = colors_bench[i % len(colors_bench)]
-
-        # Create a hollow bench (outer box minus inner box approximated as a frame)
-        inner_w = bw - 2 * total_setback
-        inner_d = bd - 2 * total_setback
-        if inner_w > 0 and inner_d > 0:
-            # Four walls of the bench
-            # Front wall
-            meshes_3d.append(create_box_mesh(bx, by, z - bench_height, bw, total_setback, bench_height, color))
-            # Back wall
-            meshes_3d.append(create_box_mesh(bx, by + bd - total_setback, z - bench_height, bw, total_setback, bench_height, color))
-            # Left wall
-            meshes_3d.append(create_box_mesh(bx, by + total_setback, z - bench_height, total_setback, bd - 2*total_setback, bench_height, color))
-            # Right wall
-            meshes_3d.append(create_box_mesh(bx + bw - total_setback, by + total_setback, z - bench_height, total_setback, bd - 2*total_setback, bench_height, color))
+    # ── 3D stepped pit shell ──
+    built = len(bench_outlines_crest)
+    if built > 0:
+        pit_depth = built * bench_height
+        for i in range(built):
+            z_top = -i * bench_height
+            z_bot = -(i + 1) * bench_height
+            tone = C["waste_bench"][i % len(C["waste_bench"])]
+            c = bench_outlines_crest[i]
+            crest_rect = (c[0][0], c[0][1], c[2][0], c[2][1])
+            toe_rect = bench_outlines_toe[i]
+            meshes_3d.append(create_frustum_ring_mesh(
+                crest_rect, z_top, toe_rect, z_bot, _shade(tone, 0.85),
+                f"pit_bench_{i + 1}_batter", "PIT-SLOPES"))
+            if i + 1 < built:
+                n = bench_outlines_crest[i + 1]
+                next_crest = (n[0][0], n[0][1], n[2][0], n[2][1])
+                meshes_3d.append(create_flat_ring_mesh(
+                    toe_rect, next_crest, z_bot, tone,
+                    f"pit_bench_{i + 1}_berm", "PIT-BERMS"))
+        # Exterior skirt: vertical walls from surface crest down to pit floor
+        c0 = bench_outlines_crest[0]
+        crest0 = (c0[0][0], c0[0][1], c0[2][0], c0[2][1])
+        meshes_3d.append(create_frustum_ring_mesh(
+            crest0, 0.0, crest0, -pit_depth,
+            _shade(C["waste_bench"][0], 0.8), "pit_exterior_skirt", "PIT-SLOPES"))
+        # Pit floor at final toe level
+        last_toe = bench_outlines_toe[built - 1]
+        if last_toe[2] > last_toe[0] and last_toe[3] > last_toe[1]:
+            floor_rect = last_toe
         else:
-            # Solid bottom bench
-            meshes_3d.append(create_box_mesh(bx, by, z - bench_height, bw, bd, bench_height, color))
+            floor_rect = crest0
+        meshes_3d.append(create_flat_rect_mesh(
+            floor_rect, -pit_depth, C["pit_floor"], "pit_floor", "PIT-FLOOR"))
 
-    # Haul road ramp (3D)
-    road_color = "#8B7355"
-    for i in range(num_benches - 1):
-        offset = i * total_setback
-        rx = pit_length / 2 - offset - haul_road_width
-        ry = -pit_width / 2 + offset
-        rz = -i * bench_height
-        meshes_3d.append(create_box_mesh(rx, ry, rz - bench_height, haul_road_width, total_setback * 2, bench_height * 0.3, road_color))
+        # Haul-road ramp: ribbon descending the east wall station-to-station
+        road_stations = []
+        for i in range(built):
+            offset = i * total_setback
+            road_x = pit_length / 2 - offset - 5
+            ry = -pit_width / 2 + offset
+            road_stations.append({
+                "x1": road_x, "y1": ry,
+                "x2": road_x - haul_road_width, "y2": ry,
+                "z": -i * bench_height,
+            })
+        if len(road_stations) > 1:
+            meshes_3d.append(create_ramp_ribbon_mesh(
+                road_stations, 2.5, C["haul_road"], "haul_road_ramp", "HAUL-ROAD"))
+
+        # Crest markers at the four pit crest corners (site furniture)
+        corners = [(crest0[0], crest0[1]), (crest0[2], crest0[1]),
+                   (crest0[2], crest0[3]), (crest0[0], crest0[3])]
+        for ci, (mx, my) in enumerate(corners):
+            meshes_3d.append(create_box_mesh(
+                mx - 1, my - 1, 0, 2, 2, 3,
+                C["equipment_orange"], "SURVEY-MARKERS", f"crest_marker_{ci}"))
 
     properties = {
         "name": "Open Pit Mine",
@@ -322,7 +564,8 @@ def generate_room_and_pillar(params: Dict[str, Any]) -> Dict[str, Any]:
             primitives_2d.append(make_hatch(pillar_pts, "ANSI31", "PILLARS", 8))
 
             # 3D pillar
-            meshes_3d.append(create_box_mesh(px, py, 0, pillar_width, pillar_width, room_height, "#7A6B5D"))
+            meshes_3d.append(create_box_mesh(px, py, 0, pillar_width, pillar_width, room_height,
+                                             C["pillar_rock"], "PILLARS"))
 
     # Room labels
     for ix in range(num_rooms_x):
@@ -338,7 +581,14 @@ def generate_room_and_pillar(params: Dict[str, Any]) -> Dict[str, Any]:
         closed=True, layer="ENTRY", color=3
     ))
     primitives_2d.append(make_text(total_w / 2 - 10, entry_y + 1, "MAIN ENTRY", 2.0, "TEXT", 3))
-    meshes_3d.append(create_box_mesh(-10, entry_y, 0, total_w + 20, entry_width, room_height, "#4A6B8A"))
+    meshes_3d.append(create_box_mesh(-10, entry_y, 0, total_w + 20, entry_width, room_height,
+                                     C["roadway_gravel"], "ENTRY"))
+
+    # Floor and roof planes at consistent z (roof renders translucent in 3D)
+    meshes_3d.append(create_box_mesh(-2, entry_y - 2, -0.6, total_w + 4, total_h - entry_y + 4, 0.6,
+                                     C["floor_rock"], "FLOOR"))
+    meshes_3d.append(create_box_mesh(-2, entry_y - 2, room_height, total_w + 4, total_h - entry_y + 4, 0.5,
+                                     C["roof_rock"], "ROOF"))
 
     # Dimensions
     primitives_2d.append(make_dimension(0, -25, pillar_width, -25, f"{pillar_width} m", "DIMENSIONS"))
@@ -402,18 +652,32 @@ def generate_ventilation_network(params: Dict[str, Any]) -> Dict[str, Any]:
         # Horizontal airway
         primitives_2d.append(make_line(0, y, ex_x, y, "AIRWAYS", 6))
         primitives_2d.append(make_text(ex_x / 2 - 5, y + 2, f"Airway {i+1}", 1.5, "TEXT", 6))
-        # 3D tube
-        meshes_3d.append(create_box_mesh(0, y - 1.5, 0, ex_x, 3, 3, "#4A8B9E"))
+        # Duct just below surface level
+        meshes_3d.append(create_box_mesh(0, y - 1.5, -2.5, ex_x, 3, 3, C["duct_steel"], "AIRWAYS"))
 
     # Vertical connections
     bottom_y = -spacing * (num_airways + 1)
     primitives_2d.append(make_line(0, 0, 0, bottom_y, "AIRWAYS", 6))
     primitives_2d.append(make_line(ex_x, 0, ex_x, bottom_y, "AIRWAYS", 6))
 
+    # Vertical manifold ducts at each shaft tying the airways into a network
+    meshes_3d.append(create_box_mesh(-1.5, bottom_y, -2.5, 3, -bottom_y + 1.5, 3, C["duct_steel"], "AIRWAYS"))
+    meshes_3d.append(create_box_mesh(ex_x - 1.5, bottom_y, -2.5, 3, -bottom_y + 1.5, 3, C["duct_steel"], "AIRWAYS"))
+
+    # Shaft collars rising above surface and a main fan on the exhaust shaft
+    meshes_3d.append(create_cylinder_mesh(0, 0, 0, 4, shaft_diameter * 0.8, 16,
+                                          C["concrete"], "intake_shaft_collar", "SHAFTS"))
+    meshes_3d.append(create_cylinder_mesh(ex_x, 0, 0, 4, shaft_diameter * 0.8, 16,
+                                          C["concrete"], "exhaust_shaft_collar", "SHAFTS"))
+
     # Fan symbol at exhaust
     fan_r = shaft_diameter * 1.5
     primitives_2d.append(make_circle(ex_x, shaft_diameter + fan_r + 3, fan_r, "FANS", 3))
     primitives_2d.append(make_text(ex_x - 3, shaft_diameter + fan_r + 2, "FAN", 2.0, "TEXT", 3))
+    meshes_3d.append(create_cylinder_mesh(ex_x, 0, 4, 4 + fan_r * 0.9, fan_r * 0.75, 20,
+                                          C["equipment_orange"], "main_fan", "FANS"))
+    meshes_3d.append(create_cylinder_mesh(ex_x, 0, 4 + fan_r * 0.9, 4 + fan_r * 1.1, fan_r * 0.25, 12,
+                                          C["trestle_steel"], "main_fan_hub", "FANS"))
 
     properties = {
         "name": "Ventilation Network",
@@ -503,14 +767,40 @@ def generate_conveyor(params: Dict[str, Any]) -> Dict[str, Any]:
     # Dimension
     primitives_2d.append(make_dimension(start_x, start_y - 15, end_x, end_y - 15, f"{actual_length:.0f} m", "DIMENSIONS"))
 
-    # 3D
+    # 3D: inclined belt following the actual route direction and the declared
+    # inclination. Degenerate route (start == end) falls back to +X, matching
+    # the frontend engine.
+    if route_length > 0:
+        route_dx, route_dy = dx, dy
+    else:
+        route_dx, route_dy = actual_length, 0.0
+    route_end_x = start_x + route_dx
+    route_end_y = start_y + route_dy
     rise = actual_length * math.tan(math.radians(inclination))
-    meshes_3d.append(create_box_mesh(start_x, start_y - width*5, 0, actual_length, width * 10, 2, "#D4A574"))
-    # Support frames — same positions as the 2D supports so both views agree
+
+    # Belt: inclined box, carrying surface on top
+    meshes_3d.append(create_inclined_box_mesh(
+        start_x, start_y, 0, route_end_x, route_end_y, rise,
+        width * 10, 2, C["conveyor_belt"], "conveyor_belt", "CONVEYOR"))
+    # Gallery rail along the belt edge
+    meshes_3d.append(create_inclined_box_mesh(
+        start_x, start_y, 2, route_end_x, route_end_y, rise + 2,
+        0.8, 1.2, C["trestle_steel"], "conveyor_rail", "STRUCTURE"))
+
+    # Trestle supports marching along the route, ground → belt underside
     for i in range(num_supports + 1):
         t = i / max(num_supports, 1)
-        sx = start_x + ux * route_length * t
-        meshes_3d.append(create_box_mesh(sx - 0.5, start_y - width*7, -5, 1, width * 14, 5, "#666666"))
+        sx = start_x + route_dx * t
+        sy = start_y + route_dy * t
+        belt_z = rise * t
+        post_w = max(1.2, width * 3)
+        meshes_3d.append(create_box_mesh(
+            sx - post_w / 2, sy - post_w / 2, 0, post_w, post_w, max(belt_z, 0.5),
+            C["trestle_steel"], "STRUCTURE"))
+        pad_w = width * 10
+        meshes_3d.append(create_box_mesh(
+            sx - pad_w / 2, sy - pad_w / 2, max(belt_z - 0.5, 0), pad_w, pad_w, 0.5,
+            C["trestle_steel"], "STRUCTURE"))
 
     properties = {
         "name": "Conveyor Route",
@@ -571,8 +861,12 @@ def generate_blast_pattern(params: Dict[str, Any]) -> Dict[str, Any]:
             x = col * spacing + x_offset + spacing / 2
             # Drill hole circle
             primitives_2d.append(make_circle(x, y, hole_diameter * 5, "BLASTHOLES", 1))
-            # 3D cylinder approximated as thin box
-            meshes_3d.append(create_box_mesh(x - 0.3, y - 0.3, -hole_depth, 0.6, 0.6, hole_depth, "#FF4444"))
+            # 3D drill hole cylinder + collar marker
+            r = max(0.25, hole_diameter)
+            meshes_3d.append(create_cylinder_mesh(x, y, -hole_depth, 0, r, 8,
+                                                  C["blast_hole"], f"blast_hole_{row}_{col}", "BLASTHOLES"))
+            meshes_3d.append(create_cylinder_mesh(x, y, 0, 0.5, r * 2, 8,
+                                                  C["equipment_orange"], f"blast_hole_{row}_{col}_collar", "BLASTHOLES"))
 
     # Dimensions
     primitives_2d.append(make_dimension(spacing/2, burden, spacing/2, burden * 2, f"{burden} m", "DIMENSIONS"))
@@ -642,25 +936,35 @@ def generate_decline(params: Dict[str, Any]) -> Dict[str, Any]:
 
     primitives_2d.append(make_polyline(pts_center, closed=False, layer="DECLINE", color=5))
 
-    # Level access crosscuts
+    # Level access crosscuts — the decline descends continuously (segment i
+    # drops from d_i to d_{i+1}), so level k (depth k·level_spacing) is hit
+    # exactly at vertex pts_center[2k].
+    total_depth = num_levels * level_spacing
+    num_segments = num_levels * 2
     for i in range(num_levels):
         ly = -level_spacing * (i + 1)
-        closest_pt = min(pts_center, key=lambda p: abs(p[1] - ly))
-        lx = closest_pt[0]
+        attach = pts_center[min(2 * (i + 1), len(pts_center) - 1)]
+        lx = attach[0]
         primitives_2d.append(make_line(lx, ly, lx + 40, ly, "LEVELS", 3))
         primitives_2d.append(make_text(lx + 42, ly - 1, f"Level {i+1}", 2.0, "TEXT", 3))
-        meshes_3d.append(create_box_mesh(lx, ly - width/2, -(i+1)*level_spacing, 40, width, height, "#4A8B6E"))
+        meshes_3d.append(create_inclined_box_mesh(
+            lx, ly, -(i + 1) * level_spacing, lx + 40, ly, -(i + 1) * level_spacing,
+            width, height, C["level_grey"], f"level_{i + 1}_drive", "LEVELS"))
 
-    # 3D decline tunnel segments
+    # 3D decline tunnel segments (inclined, continuous depth gradient)
     for i in range(len(pts_center) - 1):
         p1 = pts_center[i]
-        p2 = pts_center[i+1]
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
-        seg_len = math.sqrt(dx**2 + dy**2)
-        min_x = min(p1[0], p2[0])
-        min_y = min(p1[1], p2[1])
-        meshes_3d.append(create_box_mesh(min_x, min_y - width/2, -(i+1)*3, abs(dx) or width, abs(dy) or width, height, "#5A6B7C"))
+        p2 = pts_center[i + 1]
+        d1 = (i / num_segments) * total_depth
+        d2 = ((i + 1) / num_segments) * total_depth
+        meshes_3d.append(create_inclined_box_mesh(
+            p1[0], p1[1], -d1, p2[0], p2[1], -d2,
+            width, height, C["tunnel_grey"], f"decline_segment_{i}", "DECLINE"))
+
+    # Portal frame at the surface entrance
+    meshes_3d.append(create_box_mesh(
+        pts_center[0][0] - width / 2, pts_center[0][1] - width / 2, 0, width, width, height,
+        C["roadway_gravel"], "DECLINE", "decline_portal"))
 
     properties = {
         "name": "Decline Access",
@@ -858,8 +1162,19 @@ def generate_topographic_contours(params: Dict[str, Any]) -> Dict[str, Any]:
             lbl_pt = pts[0]
             primitives_2d.append(make_text(lbl_pt[0], lbl_pt[1] + 1.5, f"{int(elev)}m", 2.2 if is_major else 1.6, "TEXT", color))
 
-        # 3D surface steps
-        meshes_3d.append(create_box_mesh(center_x - rx/2, center_y - ry/2, elev - min_z, rx, ry, interval, "#27AE60" if is_major else "#2ECC71"))
+    # 3D terrain surface: triangulated heightfield from the same ring math as
+    # the contours (inverting radius → elevation), split into two tone bands.
+    def terrain_height(x, y):
+        nx_, ny_ = (x - center_x) / 3.5, (y - center_y) / 2.2
+        raw = math.hypot(nx_, ny_)
+        a = math.atan2(ny_, nx_)
+        wobble = 1.0 + 0.08 * math.sin(3 * a) + 0.05 * math.cos(5 * a)
+        h = max_z - raw / wobble
+        return min(max_z, max(min_z, h)) - min_z
+
+    meshes_3d.extend(create_heightfield_meshes(
+        grid_w, grid_h, 56, 38, terrain_height, (max_z - min_z) / 2,
+        C["terrain_low"], C["terrain_high"], "terrain"))
 
     # Spot height benchmarks
     spot_benchmarks = [
@@ -875,6 +1190,9 @@ def generate_topographic_contours(params: Dict[str, Any]) -> Dict[str, Any]:
         primitives_2d.append(make_line(x - 3, y, x + 3, y, "SPOT-HEIGHTS", 3))
         primitives_2d.append(make_line(x, y - 3, x, y + 3, "SPOT-HEIGHTS", 3))
         primitives_2d.append(make_text(x + 3, y + 2, f"{label} ({z:.1f}m)", 2.4, "TEXT", 3))
+        meshes_3d.append(create_cylinder_mesh(
+            x, y, z - min_z, z - min_z + 3, 1.2, 10,
+            C["equipment_yellow"], f"bm_{label.lower()}", "SPOT-HEIGHTS"))
         survey_stations.append({"station": label, "easting": round(x + 1000, 2), "northing": round(y + 2000, 2), "elevation": z, "code": "BENCHMARK"})
 
     properties = {
@@ -971,11 +1289,20 @@ def generate_borehole_lithology(params: Dict[str, Any]) -> Dict[str, Any]:
         seam_top_pts.append((hx, seam_top_y))
         seam_bot_pts.append((hx, seam_bot_y))
 
-        # 3D Drillhole column
-        meshes_3d.append(create_box_mesh(hx - 1, -1, hy - 10, 2, 2, 10, "#D35400"))  # Soil
-        meshes_3d.append(create_box_mesh(hx - 1, -1, seam_top_y, 2, 2, 10 - seam_top_y, "#F1C40F"))  # Sandstone
-        meshes_3d.append(create_box_mesh(hx - 1, -1, seam_bot_y, 2, 2, seam_thick, "#2C3E50"))  # Coal
-        meshes_3d.append(create_box_mesh(hx - 1, -1, bottom_y, 2, 2, seam_bot_y - bottom_y, "#7F8C8D"))  # Mudstone
+        # 3D drillhole column: overburden → sandstone → coal seam → mudstone
+        meshes_3d.append(create_cylinder_mesh(hx, hy, -10, 0, 1, 10,
+                                              C["overburden"], f"bh_{i + 1}_overburden", "OVERBURDEN"))
+        meshes_3d.append(create_cylinder_mesh(hx, hy, seam_top_y, -10, 1, 10,
+                                              C["sandstone"], f"bh_{i + 1}_sandstone", "SANDSTONE"))
+        meshes_3d.append(create_cylinder_mesh(hx, hy, seam_bot_y, seam_top_y, 1.3, 10,
+                                              C["coal_seam"], f"bh_{i + 1}_coal", "COAL-SEAM"))
+        meshes_3d.append(create_cylinder_mesh(hx, hy, bottom_y, seam_bot_y, 1, 10,
+                                              C["mudstone"], f"bh_{i + 1}_mudstone", "MUDSTONE-FLOOR"))
+        # Collar marker at surface + seam intercept flag
+        meshes_3d.append(create_cylinder_mesh(hx, hy, 0, 1, 1.6, 10,
+                                              C["equipment_orange"], f"bh_{i + 1}_collar", "BOREHOLE-COLLARS"))
+        meshes_3d.append(create_cylinder_mesh(hx, hy, seam_top_y - 0.25, seam_top_y + 0.25, 1.8, 12,
+                                              C["equipment_yellow"], f"bh_{i + 1}_seam_marker", "COAL-SEAM"))
 
     # Draw continuous Coal Seam horizon lines
     primitives_2d.append(make_polyline(seam_top_pts, closed=False, layer="COAL-SEAM", color=7))
@@ -1037,8 +1364,8 @@ def generate_longwall_panel(params: Dict[str, Any]) -> Dict[str, Any]:
     primitives_2d.append(make_text(panel_l / 2, -12, "HEADGATE ROADWAY & BELT CONVEYOR", 2.2, "TEXT", 5))
     primitives_2d.append(make_text(panel_l / 2, face_w + 10, "TAILGATE AIRWAY & RETURN", 2.2, "TEXT", 5))
 
-    # Current face position
-    face_x = 350.0
+    # Current face position (mirrors the frontend: capped at 350 m)
+    face_x = min(350.0, panel_l * 0.5)
     primitives_2d.append(make_line(face_x, 0, face_x, face_w, "LONGWALL-FACE", 1))
 
     # Goaf caved area behind face
@@ -1060,10 +1387,30 @@ def generate_longwall_panel(params: Dict[str, Any]) -> Dict[str, Any]:
     primitives_2d.append(make_circle(face_x, sp_y, 2.0, "SHEARER", 1))
     primitives_2d.append(make_text(face_x + 6, sp_y, f"Double-Drum Shearer ({sp_y:.1f}m)", 2.0, "TEXT", 2))
 
-    # 3D Gateroads & Face mesh
-    meshes_3d.append(create_box_mesh(0, -gate_w, 0, panel_l, gate_w, seam_h, "#34495E"))
-    meshes_3d.append(create_box_mesh(0, face_w, 0, panel_l, gate_w, seam_h, "#34495E"))
-    meshes_3d.append(create_box_mesh(face_x - 6, 0, 0, 6, face_w, seam_h, "#E67E22"))
+    # 3D: gate roads, caved goaf, coal face, powered supports, shearer
+    meshes_3d.append(create_box_mesh(0, -gate_w, 0, panel_l, gate_w, seam_h, C["gateroad"], "GATEROADS", "headgate_roadway"))
+    meshes_3d.append(create_box_mesh(0, face_w, 0, panel_l, gate_w, seam_h, C["gateroad"], "GATEROADS", "tailgate_roadway"))
+    # Caved goaf floor behind the face
+    meshes_3d.append(create_box_mesh(0, 0, 0, max(face_x - 10, 1), face_w, 0.4,
+                                     C["goaf"], "GOAF", "caved_goaf"))
+    # Coal face block (uncut coal ahead of the supports)
+    meshes_3d.append(create_box_mesh(face_x - 1.5, 0, 0, 1.5, face_w, seam_h,
+                                     C["coal_seam"], "LONGWALL-FACE", "longwall_face"))
+    # Powered roof supports along the face (every 4th, matching 2D symbols)
+    support_spacing = face_w / num_supports
+    for i in range(0, num_supports, 4):
+        sy = i * support_spacing
+        meshes_3d.append(create_box_mesh(
+            face_x - 4.5, sy, 0, 3.5, support_spacing * 3 * 0.9, seam_h * 0.92,
+            C["equipment_yellow"], "POWERED-SUPPORTS", f"powered_support_{i}"))
+    # Double-drum shearer riding the face at the declared position
+    sp_y = min(max(shearer_pos, 10.0), face_w - 10.0)
+    meshes_3d.append(create_box_mesh(face_x - 3.2, sp_y - 4, 0, 4.2, 8, seam_h * 0.85,
+                                     C["equipment_orange"], "SHEARER", "coal_shearer"))
+    meshes_3d.append(create_cylinder_mesh(face_x - 1, sp_y - 4, 0, seam_h * 0.85, 1.4, 10,
+                                          C["trestle_steel"], "SHEARER", "shearer_drum_near"))
+    meshes_3d.append(create_cylinder_mesh(face_x - 1, sp_y + 4, 0, seam_h * 0.85, 1.4, 10,
+                                          C["trestle_steel"], "SHEARER", "shearer_drum_far"))
 
     properties = {
         "name": "Longwall Panel",
@@ -1143,8 +1490,25 @@ def generate_cut_fill_volume(params: Dict[str, Any]) -> Dict[str, Any]:
     primitives_2d.append(make_text(surf_w + 20, -14, f"Estimated Fill Volume: {fill_vol_m3:,.0f} m³", 2.2, "TEXT", 5))
     primitives_2d.append(make_text(surf_w + 20, -22, f"Stripping Ratio: {cut_vol_m3 / (cut_tonnes/3.5 + 0.1):.2f} m³/t", 2.2, "TEXT", 3))
 
-    # 3D excavation block
-    meshes_3d.append(create_box_mesh(0, -strike_len/2, -pit_d, surf_w, strike_len, pit_d, "#C0392B"))
+    # 3D: excavation prism extruded from the same cross-section polygon as the
+    # 2D profile, plus a spoil-dump wedge on the downhill side.
+    cut_poly = [
+        (0, 0),
+        (side_setback, -pit_d),
+        (side_setback + bot_w, -pit_d),
+        (surf_w, surf_w * ground_tan),
+        (surf_w, surf_w * ground_tan + 2),
+        (0, 2),
+    ]
+    meshes_3d.append(create_extrude_xz_mesh(cut_poly, -strike_len / 2, strike_len / 2,
+                                            C["cut_volume"], "cut_volume", "CUT-AREA"))
+    dump_poly = [
+        (surf_w, surf_w * ground_tan),
+        (surf_w + 55, surf_w * ground_tan),
+        (surf_w, surf_w * ground_tan + 16),
+    ]
+    meshes_3d.append(create_extrude_xz_mesh(dump_poly, -strike_len / 2, strike_len / 2,
+                                            C["spoil_dump"], "spoil_dump", "FILL-AREA"))
 
     properties = {
         "name": "Cut & Fill Volume",

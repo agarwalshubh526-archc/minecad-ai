@@ -77,6 +77,9 @@ export interface MeshData {
   indices: number[][];
   color: string;
   name: string;
+  /** Optional CAD layer name — the 3D viewport uses it for rendering
+   *  semantics (e.g. 'ROOF' renders translucent). Exporters ignore it. */
+  layer?: string;
 }
 
 // ─── Layers ──────────────────────────────────────────────────────────────────

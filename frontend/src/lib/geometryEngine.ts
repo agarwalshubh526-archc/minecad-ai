@@ -23,7 +23,7 @@ function dimension(x1: number, y1: number, x2: number, y2: number, t: string, la
   return { type: 'dimension', x1, y1, x2, y2, text: t, layer, color };
 }
 
-function boxMesh(x: number, y: number, z: number, w: number, d: number, h: number, color: string): MeshData {
+function boxMesh(x: number, y: number, z: number, w: number, d: number, h: number, color: string, layer?: string, name?: string): MeshData {
   const verts = [
     [x, y, z], [x+w, y, z], [x+w, y+d, z], [x, y+d, z],
     [x, y, z+h], [x+w, y, z+h], [x+w, y+d, z+h], [x, y+d, z+h],
@@ -33,30 +33,276 @@ function boxMesh(x: number, y: number, z: number, w: number, d: number, h: numbe
     [0,4,5],[0,5,1],[2,6,7],[2,7,3],
     [0,3,7],[0,7,4],[1,5,6],[1,6,2],
   ];
-  return { type: 'mesh', vertices: verts, indices: faces, color, name: `box_${x}_${y}_${z}` };
+  return makeMesh(verts, faces, color, name ?? `box_${x}_${y}_${z}`, layer);
 }
 
-function orientedBoxMesh(
-  x: number, y: number, z: number,
-  ux: number, uy: number, // unit direction along the box length (XY plane)
-  len: number, wid: number, h: number,
-  color: string, name: string,
+// ─── Mine Design Language Palette (mirrored in backend/geometry.py) ──────────
+
+export const MINE_COLORS = {
+  wasteBench: ['#9C8D78', '#90826E', '#847763', '#786B58', '#6D604E', '#625644'],
+  pitFloor: '#5A5244',
+  haulRoad: '#9A8A70',
+  coalSeam: '#1C1C1E',
+  sandstone: '#C9B18A',
+  overburden: '#8A6F4D',
+  mudstone: '#6E6259',
+  pillarRock: '#7A6B5D',
+  roofRock: '#4E463C',
+  floorRock: '#5C5347',
+  roadwayGravel: '#6E6257',
+  ductSteel: '#5F7D8C',
+  equipmentYellow: '#F5A623',
+  equipmentOrange: '#E67E22',
+  tunnelGrey: '#5A6470',
+  levelGrey: '#6B7078',
+  terrainLow: '#6E7A4A',
+  terrainHigh: '#8A9159',
+  gateroad: '#4A4A52',
+  goaf: '#3A352F',
+  cutVolume: '#8A5A44',
+  spoilDump: '#7E8B5A',
+  concrete: '#8A8F94',
+  trestleSteel: '#7C8288',
+  blastHole: '#C0392B',
+  surveyControl: '#E74C3C',
+  surveyStation: '#F39C12',
+  conveyorBelt: '#3A3A3E',
+} as const;
+
+// Multiply a #RRGGBB color by a factor (per-channel, clamped) so derived
+// surfaces (batter faces, exterior skirt) read darker than bench berms.
+function shadeColor(hex: string, f: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((n & 255) * f));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+// Axis-aligned rectangle in plan view (mesh space: x = east, y = north-plan,
+// z = height — the renderer maps vertices to Three.js as [x, z, -y]).
+interface PlanRect { x1: number; y1: number; x2: number; y2: number }
+
+function makeMesh(verts: number[][], faces: number[][], color: string, name: string, layer?: string): MeshData {
+  const m: MeshData = { type: 'mesh', vertices: verts, indices: faces, color, name };
+  if (layer) m.layer = layer;
+  return m;
+}
+
+// Append a quad (a→b→c→d counter-clockwise seen from outside) as two triangles,
+// with its own vertices so flat shading keeps crisp face normals.
+function pushQuad(verts: number[][], faces: number[][], a: number[], b: number[], c: number[], d: number[]) {
+  const base = verts.length;
+  verts.push(a, b, c, d);
+  faces.push([base, base + 1, base + 2], [base, base + 2, base + 3]);
+}
+
+// Box spanning two plan points with an inclined bottom and parallel top:
+// bottom runs A(z1)→B(z2), top is the same run raised by h. Width w is measured
+// perpendicular to the plan direction. Used for conveyor belts and declines.
+function inclinedBoxMesh(
+  x1: number, y1: number, z1: number,
+  x2: number, y2: number, z2: number,
+  w: number, h: number,
+  color: string, name: string, layer?: string,
 ): MeshData {
-  const px = -uy, py = ux;
-  const hw = wid / 2;
-  const x2 = x + ux * len, y2 = y + uy * len;
-  const verts = [
-    [x + px*hw, y + py*hw, z], [x - px*hw, y - py*hw, z],
-    [x2 + px*hw, y2 + py*hw, z], [x2 - px*hw, y2 - py*hw, z],
-    [x + px*hw, y + py*hw, z+h], [x - px*hw, y - py*hw, z+h],
-    [x2 + px*hw, y2 + py*hw, z+h], [x2 - px*hw, y2 - py*hw, z+h],
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len * (w / 2), py = dx / len * (w / 2);
+  // corners: A/B ends, +/- perpendicular half-width
+  const Am = [x1 - px, y1 - py, z1], Ap = [x1 + px, y1 + py, z1];
+  const Bm = [x2 - px, y2 - py, z2], Bp = [x2 + px, y2 + py, z2];
+  const up = (p: number[]) => [p[0], p[1], p[2] + h];
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  pushQuad(verts, faces, up(Am), up(Bm), up(Bp), up(Ap));      // top
+  pushQuad(verts, faces, Bm, Am, Ap, Bp);                     // bottom
+  pushQuad(verts, faces, Bp, Bm, up(Bm), up(Bp));             // front (+dir)
+  pushQuad(verts, faces, Am, Ap, up(Ap), up(Am));             // back
+  pushQuad(verts, faces, Ap, Bp, up(Bp), up(Ap));             // left (+perp)
+  pushQuad(verts, faces, Bm, Am, up(Am), up(Bm));             // right
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Vertical cylinder between z0 (bottom) and z1 (top), axis at (cx, cy).
+function cylinderMesh(
+  cx: number, cy: number, z0: number, z1: number, r: number, segments: number,
+  color: string, name: string, layer?: string,
+): MeshData {
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  const cb = verts.length;
+  verts.push([cx, cy, z0]);
+  const ct = verts.length;
+  verts.push([cx, cy, z1]);
+  const ring0 = verts.length;
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    verts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r, z0]);
+  }
+  const ring1 = verts.length;
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    verts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r, z1]);
+  }
+  for (let i = 0; i < segments; i++) {
+    const j = (i + 1) % segments;
+    faces.push([ring0 + i, ring0 + j, ring1 + j]);
+    faces.push([ring0 + i, ring1 + j, ring1 + i]);
+  }
+  for (let i = 0; i < segments; i++) {
+    const j = (i + 1) % segments;
+    faces.push([cb, ring0 + j, ring0 + i]);
+    faces.push([ct, ring1 + i, ring1 + j]);
+  }
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Extrude a closed convex X-Z polygon along plan-y from y0 to y1 (cut & fill).
+function extrudeXZMesh(
+  xz: [number, number][], y0: number, y1: number,
+  color: string, name: string, layer?: string,
+): MeshData {
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  const n = xz.length;
+  for (const [x, z] of xz) verts.push([x, y0, z]);
+  for (const [x, z] of xz) verts.push([x, y1, z]);
+  for (let i = 1; i < n - 1; i++) faces.push([0, i, i + 1]);
+  for (let i = 1; i < n - 1; i++) faces.push([n, n + i + 1, n + i]);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    faces.push([i, j, n + j]);
+    faces.push([i, n + j, n + i]);
+  }
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Four sloped batter faces connecting an outer (crest) rectangle at zTop to a
+// smaller concentric inner (toe) rectangle at zBot. When the rects are equal
+// this degenerates to a vertical ring (pit exterior skirt).
+function frustumRingMesh(
+  outer: PlanRect, zTop: number, inner: PlanRect, zBot: number,
+  color: string, name: string, layer?: string,
+): MeshData {
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  const O = [
+    [outer.x1, outer.y1, zTop], [outer.x2, outer.y1, zTop],
+    [outer.x2, outer.y2, zTop], [outer.x1, outer.y2, zTop],
   ];
-  const faces = [
-    [0,2,3],[0,3,1],[4,5,7],[4,7,6],
-    [0,1,5],[0,5,4],[2,6,7],[2,7,3],
-    [0,4,6],[0,6,2],[1,3,7],[1,7,5],
+  const I = [
+    [inner.x1, inner.y1, zBot], [inner.x2, inner.y1, zBot],
+    [inner.x2, inner.y2, zBot], [inner.x1, inner.y2, zBot],
   ];
-  return { type: 'mesh', vertices: verts, indices: faces, color, name };
+  for (let s = 0; s < 4; s++) {
+    const t = (s + 1) % 4;
+    // inner faces viewed from inside the ring → reversed winding
+    pushQuad(verts, faces, O[s], O[t], I[t], I[s]);
+  }
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Horizontal band between two concentric rectangles at a fixed height
+// (bench berm / pit floor ring).
+function flatRingMesh(
+  inner: PlanRect, outer: PlanRect, z: number,
+  color: string, name: string, layer?: string,
+): MeshData {
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  const O = [
+    [outer.x1, outer.y1, z], [outer.x2, outer.y1, z],
+    [outer.x2, outer.y2, z], [outer.x1, outer.y2, z],
+  ];
+  const I = [
+    [inner.x1, inner.y1, z], [inner.x2, inner.y1, z],
+    [inner.x2, inner.y2, z], [inner.x1, inner.y2, z],
+  ];
+  for (let s = 0; s < 4; s++) {
+    const t = (s + 1) % 4;
+    pushQuad(verts, faces, O[s], O[t], I[t], I[s]);
+  }
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Filled horizontal rectangle at a fixed height (pit floor).
+function flatRectMesh(
+  r: PlanRect, z: number, color: string, name: string, layer?: string,
+): MeshData {
+  return makeMesh(
+    [[r.x1, r.y1, z], [r.x2, r.y1, z], [r.x2, r.y2, z], [r.x1, r.y2, z]],
+    [[0, 3, 2], [0, 2, 1]],
+    color, name, layer,
+  );
+}
+
+// Haul-road ramp: a ribbon following the 2D road edge stations, descending
+// between consecutive stations, with short side skirts for thickness.
+function rampRibbonMesh(
+  stations: { x1: number; y1: number; x2: number; y2: number; z: number }[],
+  skirt: number, color: string, name: string, layer?: string,
+): MeshData {
+  const verts: number[][] = [];
+  const faces: number[][] = [];
+  for (let i = 0; i < stations.length - 1; i++) {
+    const s = stations[i], t = stations[i + 1];
+    // top surface
+    pushQuad(verts, faces,
+      [s.x1, s.y1, s.z], [t.x1, t.y1, t.z],
+      [t.x2, t.y2, t.z], [s.x2, s.y2, s.z]);
+    // inner skirt (x1/y1 edge)
+    pushQuad(verts, faces,
+      [t.x1, t.y1, t.z], [s.x1, s.y1, s.z],
+      [s.x1, s.y1, s.z - skirt], [t.x1, t.y1, t.z - skirt]);
+    // outer skirt (x2/y2 edge)
+    pushQuad(verts, faces,
+      [s.x2, s.y2, s.z], [t.x2, t.y2, t.z],
+      [t.x2, t.y2, t.z - skirt], [s.x2, s.y2, s.z - skirt]);
+  }
+  return makeMesh(verts, faces, color, name, layer);
+}
+
+// Regular triangulated heightfield over [0..w]×[0..h] with per-vertex heights.// Triangles at or above zSplit go to `high`, the rest to `low` (two meshes so
+// the terrain can carry two tones).
+function heightfieldMeshes(
+  w: number, h: number, nx: number, ny: number,
+  heightAt: (x: number, y: number) => number,
+  zSplit: number, lowColor: string, highColor: string, name: string,
+): MeshData[] {
+  const verts: number[][] = [];
+  for (let j = 0; j <= ny; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const x = (i / nx) * w, y = (j / ny) * h;
+      verts.push([x, y, heightAt(x, y)]);
+    }
+  }
+  const idx = (i: number, j: number) => j * (nx + 1) + i;
+  const lowV: number[][] = [], lowF: number[][] = [], highV: number[][] = [], highF: number[][] = [];
+  const lowRemap = new Map<number, number>(), highRemap = new Map<number, number>();
+  const take = (target: number[][], remap: Map<number, number>, k: number) => {
+    let r = remap.get(k);
+    if (r === undefined) { r = target.length; target.push(verts[k]); remap.set(k, r); }
+    return r;
+  };
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const a = idx(i, j), b = idx(i + 1, j), c = idx(i + 1, j + 1), d = idx(i, j + 1);
+      const tris: [number, number, number][] = [[a, c, b], [a, d, c]];
+      for (const t of tris) {
+        const avg = (verts[t[0]][2] + verts[t[1]][2] + verts[t[2]][2]) / 3;
+        const hi = avg >= zSplit;
+        const V = hi ? highV : lowV;
+        const F = hi ? highF : lowF;
+        const R = hi ? highRemap : lowRemap;
+        F.push([take(V, R, t[0]), take(V, R, t[1]), take(V, R, t[2])]);
+      }
+    }
+  }
+  return [
+    makeMesh(lowV, lowF, lowColor, `${name}_low`, 'TERRAIN'),
+    makeMesh(highV, highF, highColor, `${name}_high`, 'TERRAIN'),
+  ];
 }
 
 // ─── Open Pit Generator ──────────────────────────────────────────────────────
@@ -88,7 +334,10 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
   prims.push(text(-pitLength/2, pitWidth/2 + 20,
     `Benches: ${numBenches} × ${benchHeight}m H × ${benchWidth}m W  |  Haul Road: ${haulRoadWidth}m  |  Slope: ${overallSlope}°`, 2.5, 'TEXT', 8));
 
-  const colors3D = ['#5B8C5A', '#4A7A4A', '#3D6B3D', '#2F5C2F', '#1E4D1E'];
+  // Collect crest (outer) and toe (after batter) rectangles per bench — the
+  // same rectangles drive the 2D outlines and the 3D stepped shell.
+  const crestRects: PlanRect[] = [];
+  const toeRects: PlanRect[] = [];
 
   for (let i = 0; i < numBenches; i++) {
     const offset = i * totalSetback;
@@ -99,6 +348,7 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
     if (cx2 <= cx1 || cy2 <= cy1) break;
 
     prims.push(polyline([[cx1, cy1], [cx2, cy1], [cx2, cy2], [cx1, cy2]], true, 'PIT-CREST', 1));
+    crestRects.push({ x1: cx1, y1: cy1, x2: cx2, y2: cy2 });
 
     const tx1 = cx1 + faceSetback;
     const ty1 = cy1 + faceSetback;
@@ -107,30 +357,17 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
     if (tx2 > tx1 && ty2 > ty1) {
       prims.push(polyline([[tx1, ty1], [tx2, ty1], [tx2, ty2], [tx1, ty2]], true, 'PIT-TOE', 5));
     }
+    toeRects.push({ x1: tx1, y1: ty1, x2: tx2, y2: ty2 });
 
     prims.push(text(cx2 + 5, (cy1 + cy2) / 2, `Bench ${i+1}`, 2, 'TEXT', 7));
-
-    // 3D benches
-    const z = -i * benchHeight;
-    const bw = pitLength - 2 * offset;
-    const bd = pitWidth - 2 * offset;
-    const col = colors3D[i % colors3D.length];
-    const innerW = bw - 2 * totalSetback;
-    const innerD = bd - 2 * totalSetback;
-    if (innerW > 0 && innerD > 0) {
-      meshes.push(boxMesh(cx1, cy1, z - benchHeight, bw, totalSetback, benchHeight, col));
-      meshes.push(boxMesh(cx1, cy2 - totalSetback, z - benchHeight, bw, totalSetback, benchHeight, col));
-      meshes.push(boxMesh(cx1, cy1 + totalSetback, z - benchHeight, totalSetback, bd - 2*totalSetback, benchHeight, col));
-      meshes.push(boxMesh(cx2 - totalSetback, cy1 + totalSetback, z - benchHeight, totalSetback, bd - 2*totalSetback, benchHeight, col));
-    } else {
-      meshes.push(boxMesh(cx1, cy1, z - benchHeight, bw, bd, benchHeight, col));
-    }
   }
+
+  const builtBenches = crestRects.length;
 
   // Haul road (plan view)
   const roadPts: [number, number][] = [];
   const roadPts2: [number, number][] = [];
-  for (let i = 0; i < numBenches; i++) {
+  for (let i = 0; i < builtBenches; i++) {
     const offset = i * totalSetback;
     const roadX = pitLength / 2 - offset - 5;
     const ry = -pitWidth / 2 + offset;
@@ -140,6 +377,51 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
   if (roadPts.length > 1) {
     prims.push(polyline(roadPts, false, 'HAUL-ROAD', 3));
     prims.push(polyline(roadPts2, false, 'HAUL-ROAD', 3));
+  }
+
+  // ── 3D stepped pit shell ──
+  // Bench i contributes sloped batter faces (crest_i at -i·H → toe_i at
+  // -(i+1)·H) plus a horizontal berm ring from its toe out to the next crest.
+  // Bench 0 additionally gets a vertical exterior skirt down to pit bottom so
+  // the pit reads as carved into a solid mass, and the last toe ring is
+  // capped with the pit floor.
+  if (builtBenches > 0) {
+    const pitDepth = builtBenches * benchHeight;
+    for (let i = 0; i < builtBenches; i++) {
+      const zTop = -i * benchHeight;
+      const zBot = -(i + 1) * benchHeight;
+      const tone = MINE_COLORS.wasteBench[i % MINE_COLORS.wasteBench.length];
+      meshes.push(frustumRingMesh(crestRects[i], zTop, toeRects[i], zBot, shadeColor(tone, 0.85), `pit_bench_${i + 1}_batter`, 'PIT-SLOPES'));
+      if (i + 1 < builtBenches) {
+        meshes.push(flatRingMesh(toeRects[i], crestRects[i + 1], zBot, tone, `pit_bench_${i + 1}_berm`, 'PIT-BERMS'));
+      }
+    }
+    // Exterior skirt: vertical walls from surface crest down to pit floor.
+    meshes.push(frustumRingMesh(crestRects[0], 0, crestRects[0], -pitDepth,
+      shadeColor(MINE_COLORS.wasteBench[0], 0.8), 'pit_exterior_skirt', 'PIT-SLOPES'));
+    // Pit floor at final toe level.
+    const lastToe = toeRects[builtBenches - 1];
+    if (lastToe.x2 > lastToe.x1 && lastToe.y2 > lastToe.y1) {
+      meshes.push(flatRectMesh(lastToe, -pitDepth, MINE_COLORS.pitFloor, 'pit_floor', 'PIT-FLOOR'));
+    } else {
+      meshes.push(flatRectMesh(crestRects[builtBenches - 1], -pitDepth, MINE_COLORS.pitFloor, 'pit_floor', 'PIT-FLOOR'));
+    }
+
+    // Haul-road ramp: ribbon descending the east wall station-to-station,
+    // mirroring the 2D road polylines.
+    if (roadPts.length > 1) {
+      const stations = roadPts.map(([x1, y1], i) => ({ x1, y1, x2: roadPts2[i][0], y2: roadPts2[i][1], z: -i * benchHeight }));
+      meshes.push(rampRibbonMesh(stations, 2.5, MINE_COLORS.haulRoad, 'haul_road_ramp', 'HAUL-ROAD'));
+    }
+
+    // Crest markers at the four pit crest corners (site furniture).
+    for (let c = 0; c < 4; c++) {
+      const corner = [
+        [crestRects[0].x1, crestRects[0].y1], [crestRects[0].x2, crestRects[0].y1],
+        [crestRects[0].x2, crestRects[0].y2], [crestRects[0].x1, crestRects[0].y2],
+      ][c];
+      meshes.push(boxMesh(corner[0] - 1, corner[1] - 1, 0, 2, 2, 3, MINE_COLORS.equipmentOrange, 'SURVEY-MARKERS'));
+    }
   }
 
   // Dimensions
@@ -223,7 +505,7 @@ export function generateRoomAndPillar(params: Record<string, number>): GeometryD
         [[px, py], [px + pillarW, py], [px + pillarW, py + pillarW], [px, py + pillarW]],
         true, 'PILLARS', 4
       ));
-      meshes.push(boxMesh(px, py, 0, pillarW, pillarW, roomH, '#7A6B5D'));
+      meshes.push(boxMesh(px, py, 0, pillarW, pillarW, roomH, MINE_COLORS.pillarRock, 'PILLARS'));
     }
   }
 
@@ -231,7 +513,12 @@ export function generateRoomAndPillar(params: Record<string, number>): GeometryD
   const ey = -entryW - 5;
   prims.push(polyline([[-10, ey], [totalW + 10, ey], [totalW + 10, ey + entryW], [-10, ey + entryW]], true, 'ENTRY', 3));
   prims.push(text(totalW / 2 - 10, ey + 1, 'MAIN ENTRY', 2, 'TEXT', 3));
-  meshes.push(boxMesh(-10, ey, 0, totalW + 20, entryW, roomH, '#4A6B8A'));
+  meshes.push(boxMesh(-10, ey, 0, totalW + 20, entryW, roomH, MINE_COLORS.roadwayGravel, 'ENTRY'));
+
+  // Floor and roof planes at consistent z (roof renders translucent in 3D so
+  // the workings stay visible from above).
+  meshes.push(boxMesh(-2, ey - 2, -0.6, totalW + 4, totalH - ey + 4, 0.6, MINE_COLORS.floorRock, 'FLOOR'));
+  meshes.push(boxMesh(-2, ey - 2, roomH, totalW + 4, totalH - ey + 4, 0.5, MINE_COLORS.roofRock, 'ROOF'));
 
   return {
     primitives: prims, meshes, layers,
@@ -275,16 +562,27 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
     const y = -spacing * (i + 1);
     prims.push(line(0, y, exX, y, 'AIRWAYS', 6));
     prims.push(text(exX / 2 - 5, y + 2, `Airway ${i+1}`, 1.5, 'TEXT', 6));
-    meshes.push(boxMesh(0, y - 1.5, 0, exX, 3, 3, '#4A8B9E'));
+    // Duct just below surface level
+    meshes.push(boxMesh(0, y - 1.5, -2.5, exX, 3, 3, MINE_COLORS.ductSteel, 'AIRWAYS'));
   }
 
   const bottomY = -spacing * (numAirways + 1);
   prims.push(line(0, 0, 0, bottomY, 'AIRWAYS', 6));
   prims.push(line(exX, 0, exX, bottomY, 'AIRWAYS', 6));
 
+  // Vertical manifold ducts at each shaft tying the airways into a network
+  meshes.push(boxMesh(-1.5, bottomY, -2.5, 3, -bottomY + 1.5, 3, MINE_COLORS.ductSteel, 'AIRWAYS'));
+  meshes.push(boxMesh(exX - 1.5, bottomY, -2.5, 3, -bottomY + 1.5, 3, MINE_COLORS.ductSteel, 'AIRWAYS'));
+
+  // Shaft collars rising above surface and a main fan on the exhaust shaft
+  meshes.push(cylinderMesh(0, 0, 0, 4, shaftD * 0.8, 16, MINE_COLORS.concrete, 'intake_shaft_collar', 'SHAFTS'));
+  meshes.push(cylinderMesh(exX, 0, 0, 4, shaftD * 0.8, 16, MINE_COLORS.concrete, 'exhaust_shaft_collar', 'SHAFTS'));
+
   const fanR = shaftD * 1.5;
   prims.push(circle(exX, shaftD + fanR + 3, fanR, 'FANS', 3));
   prims.push(text(exX - 3, shaftD + fanR + 2, 'FAN', 2, 'TEXT', 3));
+  meshes.push(cylinderMesh(exX, 0, 4, 4 + fanR * 0.9, fanR * 0.75, 20, MINE_COLORS.equipmentOrange, 'main_fan', 'FANS'));
+  meshes.push(cylinderMesh(exX, 0, 4 + fanR * 0.9, 4 + fanR * 1.1, fanR * 0.25, 12, MINE_COLORS.trestleSteel, 'main_fan_hub', 'FANS'));
 
   return {
     primitives: prims, meshes, layers,
@@ -342,21 +640,38 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
 
   prims.push(dimension(startX, startY - 15, endX, endY - 15, `${actualLen.toFixed(0)} m`));
 
-  // 3D: build the belt and supports along the actual route direction (the 2D
-  // view honors dx/dy; previously the 3D mesh always ran along +X).
+  // 3D: inclined belt following the actual route direction and the declared
+  // inclination (2D plan view agrees — height is the inclination axis).
   // When start == end there is no route direction — fall back to +X.
   const hasRouteDir = dx !== 0 || dy !== 0;
   const dirX = hasRouteDir ? nx : 1;
   const dirY = hasRouteDir ? ny : 0;
   const routeDx = hasRouteDir ? dx : dirX * actualLen;
   const routeDy = hasRouteDir ? dy : dirY * actualLen;
+  const routeEndX = startX + routeDx;
+  const routeEndY = startY + routeDy;
+  const rise = actualLen * Math.tan(inclination * Math.PI / 180);
 
-  meshes.push(orientedBoxMesh(startX, startY, 0, dirX, dirY, actualLen, width*10, 2, '#D4A574', 'conveyor_belt'));
+  // Belt: inclined box, carrying surface on top
+  meshes.push(inclinedBoxMesh(startX, startY, 0, routeEndX, routeEndY, rise,
+    width * 10, 2, MINE_COLORS.conveyorBelt, 'conveyor_belt', 'CONVEYOR'));
+  // Conveyor gallery rail along the belt edge (thin inclined strip)
+  meshes.push(inclinedBoxMesh(startX, startY, 2, routeEndX, routeEndY, rise + 2,
+    0.8, 1.2, MINE_COLORS.trestleSteel, 'conveyor_rail', 'STRUCTURE'));
+
+  // Trestle supports marching along the route, ground → belt underside
   for (let i = 0; i <= numSupports; i++) {
     const t = i / Math.max(numSupports, 1);
     const cx = startX + routeDx * t;
     const cy = startY + routeDy * t;
-    meshes.push(orientedBoxMesh(cx - dirX*0.5, cy - dirY*0.5, -5, dirX, dirY, 1, width*14, 5, '#666666', `conveyor_support_${i}`));
+    const beltZ = rise * t;
+    const postW = Math.max(1.2, width * 3);
+    meshes.push(boxMesh(cx - postW / 2, cy - postW / 2, 0, postW, postW, Math.max(beltZ, 0.5),
+      MINE_COLORS.trestleSteel, 'STRUCTURE'));
+    // Bearing pad under the belt
+    const padW = width * 10;
+    meshes.push(boxMesh(cx - padW / 2, cy - padW / 2, Math.max(beltZ - 0.5, 0), padW, padW, 0.5,
+      MINE_COLORS.trestleSteel, 'STRUCTURE'));
   }
 
   return {
@@ -403,7 +718,9 @@ export function generateBlastPattern(params: Record<string, unknown>): GeometryD
     for (let col = 0; col < numHoles; col++) {
       const x = col * spacing + xOff + spacing / 2;
       prims.push(circle(x, y, holeDiam * 5, 'BLASTHOLES', 1));
-      meshes.push(boxMesh(x - 0.3, y - 0.3, -holeDepth, 0.6, 0.6, holeDepth, '#FF4444'));
+      const r = Math.max(0.25, holeDiam);
+      meshes.push(cylinderMesh(x, y, -holeDepth, 0, r, 8, MINE_COLORS.blastHole, `blast_hole_${row}_${col}`, 'BLASTHOLES'));
+      meshes.push(cylinderMesh(x, y, 0, 0.5, r * 2, 8, MINE_COLORS.equipmentOrange, `blast_hole_${row}_${col}_collar`, 'BLASTHOLES'));
     }
   }
 
@@ -460,21 +777,33 @@ export function generateDecline(params: Record<string, number>): GeometryData {
     prims.push(circle(pt[0], pt[1], 1.5, 'DECLINE', 5));
   }
 
+  // The decline descends continuously: segment i drops from d_i to d_{i+1}
+  // where d_i = i · (totalDepth / segments), so level k (depth k·levelSpacing)
+  // is reached exactly at vertex pts[2k].
+  const totalDepth = numLevels * levelSpacing;
+  const numSegments = numLevels * 2;
+
   for (let i = 0; i < numLevels; i++) {
     const ly = -levelSpacing * (i + 1);
-    const closest = pts.reduce((a, b) => Math.abs(a[1] - ly) < Math.abs(b[1] - ly) ? a : b);
-    prims.push(line(closest[0], ly, closest[0] + 40, ly, 'LEVELS', 3));
-    prims.push(text(closest[0] + 42, ly - 1, `Level ${i+1}`, 2, 'TEXT', 3));
-    meshes.push(boxMesh(closest[0], ly - width/2, -(i+1)*levelSpacing, 40, width, height, '#4A8B6E'));
+    const attach = pts[Math.min(2 * (i + 1), pts.length - 1)];
+    prims.push(line(attach[0], ly, attach[0] + 40, ly, 'LEVELS', 3));
+    prims.push(text(attach[0] + 42, ly - 1, `Level ${i+1}`, 2, 'TEXT', 3));
+    meshes.push(inclinedBoxMesh(attach[0], ly, -(i + 1) * levelSpacing,
+      attach[0] + 40, ly, -(i + 1) * levelSpacing,
+      width, height, MINE_COLORS.levelGrey, `level_${i + 1}_drive`, 'LEVELS'));
   }
 
   for (let i = 0; i < pts.length - 1; i++) {
-    const p1 = pts[i], p2 = pts[i+1];
-    meshes.push(boxMesh(
-      Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]) - width/2, -(i+1)*3,
-      Math.abs(p2[0]-p1[0]) || width, Math.abs(p2[1]-p1[1]) || width, height, '#5A6B7C'
-    ));
+    const p1 = pts[i], p2 = pts[i + 1];
+    const d1 = (i / numSegments) * totalDepth;
+    const d2 = ((i + 1) / numSegments) * totalDepth;
+    meshes.push(inclinedBoxMesh(p1[0], p1[1], -d1, p2[0], p2[1], -d2,
+      width, height, MINE_COLORS.tunnelGrey, `decline_segment_${i}`, 'DECLINE'));
   }
+
+  // Portal frame at the surface entrance
+  meshes.push(boxMesh(pts[0][0] - width / 2, pts[0][1] - width / 2, 0, width, width, height,
+    MINE_COLORS.roadwayGravel, 'decline_portal', 'DECLINE'));
 
   return {
     primitives: prims, meshes, layers,
@@ -643,9 +972,21 @@ export function generateTopographicContours(params: Record<string, unknown>): Ge
     if (pts.length > 0) {
       prims.push(text(pts[0][0], pts[0][1] + 1.5, `${Math.floor(elev)}m`, isMajor ? 2.2 : 1.6, 'TEXT', color));
     }
-
-    meshes.push(boxMesh(centerX - rx/2, centerY - ry/2, elev - minZ, rx, ry, interval, isMajor ? '#27AE60' : '#2ECC71'));
   }
+
+  // 3D terrain surface: a triangulated heightfield generated from the same
+  // ring math as the contours (inverting radius → elevation), split into two
+  // tone bands at mid-elevation.
+  const heightAt = (x: number, y: number) => {
+    const nx = (x - centerX) / 3.5, ny = (y - centerY) / 2.2;
+    const raw = Math.hypot(nx, ny);
+    const a = Math.atan2(ny, nx);
+    const wobble = 1.0 + 0.08 * Math.sin(3 * a) + 0.05 * Math.cos(5 * a);
+    const h = maxZ - raw / wobble;
+    return Math.min(maxZ, Math.max(minZ, h)) - minZ;
+  };
+  meshes.push(...heightfieldMeshes(gridW, gridH, 56, 38, heightAt,
+    (maxZ - minZ) / 2, MINE_COLORS.terrainLow, MINE_COLORS.terrainHigh, 'terrain'));
 
   const spots = [
     { x: centerX, y: centerY, z: maxZ, label: 'BM-TOP' },
@@ -658,6 +999,8 @@ export function generateTopographicContours(params: Record<string, unknown>): Ge
     prims.push(line(s.x - 3, s.y, s.x + 3, s.y, 'SPOT-HEIGHTS', 3));
     prims.push(line(s.x, s.y - 3, s.x, s.y + 3, 'SPOT-HEIGHTS', 3));
     prims.push(text(s.x + 3, s.y + 2, `${s.label} (${s.z.toFixed(1)}m)`, 2.4, 'TEXT', 3));
+    meshes.push(cylinderMesh(s.x, s.y, s.z - minZ, s.z - minZ + 3, 1.2, 10,
+      MINE_COLORS.equipmentYellow, `bm_${s.label.toLowerCase()}`, 'SPOT-HEIGHTS'));
     return { station: s.label, easting: Number((s.x + 1000).toFixed(2)), northing: Number((s.y + 2000).toFixed(2)), elevation: s.z, code: 'BENCHMARK' };
   });
 
@@ -734,9 +1077,15 @@ export function generateBoreholeLithology(params: Record<string, unknown>): Geom
     seamTopPts.push([hx, seamTopY]);
     seamBotPts.push([hx, seamBotY]);
 
-    meshes.push(boxMesh(hx - 1, -1, hy - 10, 2, 2, 10, '#D35400'));
-    meshes.push(boxMesh(hx - 1, -1, seamTopY, 2, 2, 10 - seamTopY, '#F1C40F'));
-    meshes.push(boxMesh(hx - 1, -1, seamBotY, 2, 2, seamThick, '#2C3E50'));
+    // 3D drillhole column: overburden → sandstone → coal seam → mudstone floor
+    meshes.push(cylinderMesh(hx, hy, -10, 0, 1, 10, MINE_COLORS.overburden, `bh_${i + 1}_overburden`, 'OVERBURDEN'));
+    meshes.push(cylinderMesh(hx, hy, seamTopY, -10, 1, 10, MINE_COLORS.sandstone, `bh_${i + 1}_sandstone`, 'SANDSTONE'));
+    meshes.push(cylinderMesh(hx, hy, seamBotY, seamTopY, 1.3, 10, MINE_COLORS.coalSeam, `bh_${i + 1}_coal`, 'COAL-SEAM'));
+    meshes.push(cylinderMesh(hx, hy, bottomY, seamBotY, 1, 10, MINE_COLORS.mudstone, `bh_${i + 1}_mudstone`, 'MUDSTONE-FLOOR'));
+    // Collar marker at surface
+    meshes.push(cylinderMesh(hx, hy, 0, 1, 1.6, 10, MINE_COLORS.equipmentOrange, `bh_${i + 1}_collar`, 'BOREHOLE-COLLARS'));
+    // Seam intercept marker flag
+    meshes.push(cylinderMesh(hx, hy, seamTopY - 0.25, seamTopY + 0.25, 1.8, 12, MINE_COLORS.equipmentYellow, `bh_${i + 1}_seam_marker`, 'COAL-SEAM'));
   }
 
   prims.push(polyline(seamTopPts, false, 'COAL-SEAM', 7));
@@ -793,9 +1142,28 @@ export function generateLongwallPanel(params: Record<string, unknown>): Geometry
   prims.push(circle(faceX, shearerPos, 4.0, 'SHEARER', 2));
   prims.push(text(faceX + 6, shearerPos, `Double-Drum Shearer (${shearerPos.toFixed(1)}m)`, 2.0, 'TEXT', 2));
 
-  meshes.push(boxMesh(0, -gateW, 0, panelL, gateW, seamH, '#34495E'));
-  meshes.push(boxMesh(0, faceW, 0, panelL, gateW, seamH, '#34495E'));
-  meshes.push(boxMesh(faceX - 6, 0, 0, 6, faceW, seamH, '#E67E22'));
+  // 3D: gate roads, caved goaf, coal face, powered supports, shearer
+  meshes.push(boxMesh(0, -gateW, 0, panelL, gateW, seamH, MINE_COLORS.gateroad, 'headgate_roadway', 'GATEROADS'));
+  meshes.push(boxMesh(0, faceW, 0, panelL, gateW, seamH, MINE_COLORS.gateroad, 'tailgate_roadway', 'GATEROADS'));
+  // Caved goaf floor behind the face
+  meshes.push(boxMesh(0, 0, 0, Math.max(faceX - 10, 1), faceW, 0.4, MINE_COLORS.goaf, 'caved_goaf', 'GOAF'));
+  // Coal face block (uncut coal ahead of the supports)
+  meshes.push(boxMesh(faceX - 1.5, 0, 0, 1.5, faceW, seamH, MINE_COLORS.coalSeam, 'longwall_face', 'LONGWALL-FACE'));
+  // Powered roof supports along the face (every 4th, matching the 2D symbols)
+  const supportSpacing = faceW / numSupports;
+  for (let i = 0; i < numSupports; i += 4) {
+    const sy = i * supportSpacing;
+    meshes.push(boxMesh(faceX - 4.5, sy, 0, 3.5, supportSpacing * 3 * 0.9, seamH * 0.92,
+      MINE_COLORS.equipmentYellow, `powered_support_${i}`, 'POWERED-SUPPORTS'));
+  }
+  // Double-drum shearer riding the face at the declared position
+  const spY = Math.min(Math.max(shearerPos, 10), faceW - 10);
+  meshes.push(boxMesh(faceX - 3.2, spY - 4, 0, 4.2, 8, seamH * 0.85,
+    MINE_COLORS.equipmentOrange, 'coal_shearer', 'SHEARER'));
+  meshes.push(cylinderMesh(faceX - 1, spY - 4, 0, seamH * 0.85, 1.4, 10,
+    MINE_COLORS.trestleSteel, 'shearer_drum_near', 'SHEARER'));
+  meshes.push(cylinderMesh(faceX - 1, spY + 4, 0, seamH * 0.85, 1.4, 10,
+    MINE_COLORS.trestleSteel, 'shearer_drum_far', 'SHEARER'));
 
   return {
     primitives: prims,
@@ -859,7 +1227,23 @@ export function generateCutFillVolume(params: Record<string, unknown>): Geometry
   prims.push(text(surfW + 20, 2, `Total Cut Volume: ${cutVolM3.toLocaleString()} m³`, 2.4, 'TEXT', 1));
   prims.push(text(surfW + 20, -6, `Total Excavation Tonnage: ${cutTonnes.toLocaleString()} Tonnes`, 2.4, 'TEXT', 1));
 
-  meshes.push(boxMesh(0, -strikeLen/2, -pitD, surfW, strikeLen, pitD, '#C0392B'));
+  // 3D: excavation prism extruded from the same cross-section polygon as the
+  // 2D profile, plus a spoil-dump wedge on the downhill side.
+  const cutPoly: [number, number][] = [
+    [0, 0],
+    [sideSetback, -pitD],
+    [sideSetback + botW, -pitD],
+    [surfW, surfW * groundTan],
+    [surfW, surfW * groundTan + 2],
+    [0, 2],
+  ];
+  meshes.push(extrudeXZMesh(cutPoly, -strikeLen / 2, strikeLen / 2, MINE_COLORS.cutVolume, 'cut_volume', 'CUT-AREA'));
+  const dumpPoly: [number, number][] = [
+    [surfW, surfW * groundTan],
+    [surfW + 55, surfW * groundTan],
+    [surfW, surfW * groundTan + 16],
+  ];
+  meshes.push(extrudeXZMesh(dumpPoly, -strikeLen / 2, strikeLen / 2, MINE_COLORS.spoilDump, 'spoil_dump', 'FILL-AREA'));
 
   return {
     primitives: prims,
