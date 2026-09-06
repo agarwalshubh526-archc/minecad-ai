@@ -102,7 +102,9 @@ export function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Revoking synchronously can cancel the download before the browser
+  // claims the blob (racy in Chrome/Firefox) — defer it.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function downloadText(content: string, filename: string, mimeType = 'text/plain') {
