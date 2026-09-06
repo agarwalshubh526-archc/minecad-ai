@@ -334,6 +334,18 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
     }
   }, [geometry]);
 
+  // Escape cancels the active measure tool and clears its points
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveTool('pan');
+        setMeasurePoints([]);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Wheel zoom needs a non-passive listener — React's onWheel is passive,
   // so e.preventDefault() there doesn't stop the page from scrolling.
   useEffect(() => {
