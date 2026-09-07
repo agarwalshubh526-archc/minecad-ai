@@ -360,7 +360,10 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         bench_outlines_toe.append((tx1, ty1, tx2, ty2))
 
         # Bench label
-        primitives_2d.append(make_text(cx2 + 5, (cy1 + cy2) / 2, f"Bench {i+1}", 2.0, layer_text, 7))
+        # Stagger each label into the corridor just above the ring's top-left
+        # corner — the top-right holds the sheet's north arrow, and stacked
+        # on the centreline the labels overlap into an unreadable blob.
+        primitives_2d.append(make_text(cx1 - 12, cy2 + 4, f"Bench {i+1}", 2.0, layer_text, 7))
 
     # ── Haul Road (simplified as a diagonal strip on the east side) ──
     if len(bench_outlines_crest) > 1:
@@ -374,6 +377,12 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         # Second edge of road
         road_pts2 = [(p[0] - haul_road_width, p[1]) for p in road_pts]
         primitives_2d.append(make_polyline(road_pts2, closed=False, layer=layer_road, color=3))
+        # Haul-road width + typical grade annotation (8–10% is industry typical).
+        # Placed at the bottom of the road: the top bench collides with
+        # the "Bench N" labels.
+        rx, ry = road_pts[0]
+        primitives_2d.append(make_dimension(rx - haul_road_width, ry - 6, rx, ry - 6, f"HAUL ROAD {haul_road_width} m", layer_dims))
+        primitives_2d.append(make_text(rx + 7, ry + 5, "GRADE ≈10%", 2.0, layer_text, 8))
 
     # ── Dimensions ──
     if bench_outlines_crest:
@@ -426,6 +435,26 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         berm_x = sx + i * total_setback
         dim_x = berm_x - 10
         primitives_2d.append(make_dimension(dim_x, sy - i * bench_height, dim_x, sy - (i+1) * bench_height, f"{bench_height} m", layer_dims))
+
+    # Overall depth annotation on the section
+    built_n = len(bench_outlines_crest)
+    pit_depth_total = built_n * bench_height
+    primitives_2d.append(make_dimension(sx - 24, sy - pit_depth_total, sx - 24, sy, f"DEPTH {pit_depth_total:g} m", layer_dims))
+
+    # Pit shell volume: rectangular-pyramid frustum per bench between crests
+    def _rect_area(r):
+        return max(0.0, (r[2] - r[0]) * (r[3] - r[1]))
+    waste_vol = 0.0
+    for i in range(built_n):
+        c = bench_outlines_crest[i]
+        a1 = _rect_area((c[0][0], c[0][1], c[2][0], c[2][1]))
+        if i + 1 < built_n:
+            n = bench_outlines_crest[i + 1]
+            a2 = _rect_area((n[0][0], n[0][1], n[2][0], n[2][1]))
+        else:
+            a2 = _rect_area(bench_outlines_toe[built_n - 1])
+        waste_vol += (bench_height / 3) * (a1 + a2 + math.sqrt(a1 * a2))
+    waste_tonnes = waste_vol * 2.7  # waste rock ≈ 2.7 t/m³
 
     # ── 3D stepped pit shell ──
     built = len(bench_outlines_crest)
@@ -496,6 +525,8 @@ def generate_open_pit(params: Dict[str, Any]) -> Dict[str, Any]:
         "overall_slope": overall_slope,
         "batter_angle": batter_angle,
         "total_depth": num_benches * bench_height,
+        "waste_volume_m3": round(waste_vol),
+        "waste_tonnes": round(waste_tonnes),
     }
 
     return {
@@ -590,9 +621,12 @@ def generate_room_and_pillar(params: Dict[str, Any]) -> Dict[str, Any]:
     meshes_3d.append(create_box_mesh(-2, entry_y - 2, room_height, total_w + 4, total_h - entry_y + 4, 0.5,
                                      C["roof_rock"], "ROOF"))
 
-    # Dimensions
-    primitives_2d.append(make_dimension(0, -25, pillar_width, -25, f"{pillar_width} m", "DIMENSIONS"))
-    primitives_2d.append(make_dimension(pillar_width, -25, pillar_width + room_width, -25, f"{room_width} m", "DIMENSIONS"))
+    # Dimensions — pillar & room widths with labels (extraction uses the
+    # standard formula 1 − (pillar/cell)², typically 40–70% in practice)
+    primitives_2d.append(make_dimension(0, -25, pillar_width, -25, f"PILLAR {pillar_width} m", "DIMENSIONS"))
+    primitives_2d.append(make_dimension(pillar_width, -25, pillar_width + room_width, -25, f"ROOM {room_width} m", "DIMENSIONS"))
+    extraction_ratio = round((1 - (pillar_width**2) / (cell_w**2)) * 100, 1)
+    primitives_2d.append(make_text(0, total_h + 14, f"EXTRACTION RATIO ≈{extraction_ratio}%", 2.5, "TEXT", 2))
 
     properties = {
         "name": "Room & Pillar Mine",
@@ -602,7 +636,8 @@ def generate_room_and_pillar(params: Dict[str, Any]) -> Dict[str, Any]:
         "num_rooms_y": num_rooms_y,
         "room_height": room_height,
         "entry_width": entry_width,
-        "extraction_ratio": round((room_width**2) / ((room_width + pillar_width)**2) * 100, 1),
+        "extraction_ratio": extraction_ratio,
+        "coal_tonnes_in_situ": round(num_rooms_x * num_rooms_y * (cell_w**2 - pillar_width**2) * room_height * 1.4),
     }
 
     return {
@@ -638,7 +673,7 @@ def generate_ventilation_network(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # Intake shaft
     primitives_2d.append(make_circle(0, 0, shaft_diameter, "SHAFTS", 1))
-    primitives_2d.append(make_text(-8, -shaft_diameter - 5, "INTAKE SHAFT", 2.0, "TEXT", 1))
+    primitives_2d.append(make_text(-8, -shaft_diameter - 5, f"INTAKE SHAFT Ø{shaft_diameter} m", 2.0, "TEXT", 1))
 
     # Exhaust shaft
     ex_x = airway_length * 2
@@ -652,6 +687,8 @@ def generate_ventilation_network(params: Dict[str, Any]) -> Dict[str, Any]:
         # Horizontal airway
         primitives_2d.append(make_line(0, y, ex_x, y, "AIRWAYS", 6))
         primitives_2d.append(make_text(ex_x / 2 - 5, y + 2, f"Airway {i+1}", 1.5, "TEXT", 6))
+        if i == 0:
+            primitives_2d.append(make_text(2, y - 4, f"L={airway_length} m  v=5 m/s", 1.8, "TEXT", 8))
         # Duct just below surface level
         meshes_3d.append(create_box_mesh(0, y - 1.5, -2.5, ex_x, 3, 3, C["duct_steel"], "AIRWAYS"))
 
@@ -685,6 +722,7 @@ def generate_ventilation_network(params: Dict[str, Any]) -> Dict[str, Any]:
         "airway_length": airway_length,
         "shaft_diameter": shaft_diameter,
         "fan_power_kw": fan_power,
+        "estimated_airflow_m3s": round(5 * math.pi * (shaft_diameter / 2) ** 2),
     }
 
     return {
@@ -777,6 +815,9 @@ def generate_conveyor(params: Dict[str, Any]) -> Dict[str, Any]:
     route_end_x = start_x + route_dx
     route_end_y = start_y + route_dy
     rise = actual_length * math.tan(math.radians(inclination))
+    primitives_2d.append(make_text(
+        (start_x + route_end_x) / 2, (start_y + route_end_y) / 2 + 8,
+        f"INCLINE {inclination}° · RISE {rise:.0f} m", 2.0, "TEXT", 2))
 
     # Belt: inclined box, carrying surface on top
     meshes_3d.append(create_inclined_box_mesh(
@@ -810,6 +851,7 @@ def generate_conveyor(params: Dict[str, Any]) -> Dict[str, Any]:
         "belt_speed": belt_speed,
         "start": [start_x, start_y],
         "end": [end_x, end_y],
+        "vertical_lift_m": round(rise, 2),
     }
 
     return {
@@ -871,6 +913,12 @@ def generate_blast_pattern(params: Dict[str, Any]) -> Dict[str, Any]:
     # Dimensions
     primitives_2d.append(make_dimension(spacing/2, burden, spacing/2, burden * 2, f"{burden} m", "DIMENSIONS"))
     primitives_2d.append(make_dimension(spacing/2, burden - 3, spacing/2 + spacing, burden - 3, f"{spacing} m", "DIMENSIONS"))
+    # Blasting convention check: spacing/burden ≈ 1.0–1.4 for production blasts
+    sb_ratio = round(spacing / burden, 2) if burden else 0
+    primitives_2d.append(make_text(total_width + 5, burden * (num_rows + 1), f"S/B = {sb_ratio}", 2.0, "TEXT", 2))
+    total_holes = num_rows * num_holes_per_row
+    rock_vol_m3 = burden * spacing * hole_depth * total_holes
+    muck_vol_loose = rock_vol_m3 * 1.3  # swell factor
 
     properties = {
         "name": "Blast Pattern",
@@ -881,7 +929,10 @@ def generate_blast_pattern(params: Dict[str, Any]) -> Dict[str, Any]:
         "hole_diameter": hole_diameter,
         "hole_depth": hole_depth,
         "pattern": pattern,
-        "total_holes": num_rows * num_holes_per_row,
+        "total_holes": total_holes,
+        "spacing_burden_ratio": sb_ratio,
+        "rock_volume_m3": round(rock_vol_m3),
+        "muck_volume_loose_m3": round(muck_vol_loose),
     }
 
     return {
@@ -966,6 +1017,13 @@ def generate_decline(params: Dict[str, Any]) -> Dict[str, Any]:
         pts_center[0][0] - width / 2, pts_center[0][1] - width / 2, 0, width, width, height,
         C["roadway_gravel"], "DECLINE", "decline_portal"))
 
+    # Key-quantity annotations: gradient at the portal (1:7–1:10 is typical)
+    ratio = f"1:{round(100 / gradient)}" if gradient > 0 else "level"
+    primitives_2d.append(make_text(pts_center[0][0] + 4, pts_center[0][1] + 6,
+                                   f"GRADIENT {gradient}% ({ratio})", 2.2, "TEXT", 2))
+    primitives_2d.append(make_text(pts_center[0][0] + 4, pts_center[0][1] + 1,
+                                   f"VERTICAL DROP {round(total_length * gradient / 100)} m", 2.2, "TEXT", 8))
+
     properties = {
         "name": "Decline Access",
         "width": width,
@@ -974,6 +1032,7 @@ def generate_decline(params: Dict[str, Any]) -> Dict[str, Any]:
         "total_length": total_length,
         "num_levels": num_levels,
         "level_spacing": level_spacing,
+        "vertical_drop_m": round(total_length * gradient / 100),
     }
 
     total_depth = num_levels * level_spacing
@@ -1037,6 +1096,8 @@ def generate_mine_survey_traverse(params: Dict[str, Any]) -> Dict[str, Any]:
     closure_error_n = round((curr_n - start_n) * 0.05, 3)
     total_len = sum(avg_dist for _ in range(num_stations))
     precision_ratio = f"1 : {int(total_len / (math.sqrt(closure_error_e**2 + closure_error_n**2) + 0.001))}"
+    primitives_2d.append(make_text(start_e - 40, start_n + 52,
+                                   f"TRAVERSE {total_len:.0f} m · PRECISION {precision_ratio}", 2.2, "TEXT", 8))
 
     pts_loop = [(s["easting"], s["northing"]) for s in stations]
     primitives_2d.append(make_polyline(pts_loop, closed=True, layer="TRAVERSE-LINES", color=4))
@@ -1131,6 +1192,7 @@ def generate_topographic_contours(params: Dict[str, Any]) -> Dict[str, Any]:
     ]
 
     primitives_2d.append(make_text(0, grid_h / 2 + 25, "TOPOGRAPHIC SURFACE & DTM CONTOUR MAP", 5.0, "TEXT", 7))
+    primitives_2d.append(make_text(0, grid_h / 2 + 17, f"CONTOUR INTERVAL {interval:g} m · RELIEF {round(max_z - min_z)} m", 2.2, "TEXT", 8))
 
     # Generate synthetic hill contours
     center_x, center_y = grid_w * 0.4, grid_h * 0.5
@@ -1242,6 +1304,7 @@ def generate_borehole_lithology(params: Dict[str, Any]) -> Dict[str, Any]:
         {"name": "COAL-SEAM", "color": 7, "description": "Economic coal seam"},
         {"name": "MUDSTONE-FLOOR", "color": 5, "description": "Seam floor mudstone"},
         {"name": "TEXT", "color": 7, "description": "Labels and depths"},
+        {"name": "DIMENSIONS", "color": 2, "description": "Depth dimensions"},
     ]
 
     primitives_2d.append(make_text(-20, 50, "GEOLOGICAL BOREHOLE & STRATIGRAPHY CROSS SECTION", 5.0, "TEXT", 7))
@@ -1285,6 +1348,8 @@ def generate_borehole_lithology(params: Dict[str, Any]) -> Dict[str, Any]:
 
         primitives_2d.append(make_text(hx + 5, seam_top_y, f"Coal Top: -{curr_seam_depth:.1f}m", 1.8, "TEXT", 7))
         primitives_2d.append(make_text(hx + 5, seam_bot_y - 2, f"Thick: {seam_thick}m", 1.8, "TEXT", 2))
+        if i == 0:
+            primitives_2d.append(make_dimension(hx - 12, bottom_y, hx - 12, hy, f"DEPTH {total_depth:g} m", "DIMENSIONS"))
 
         seam_top_pts.append((hx, seam_top_y))
         seam_bot_pts.append((hx, seam_bot_y))
@@ -1319,6 +1384,7 @@ def generate_borehole_lithology(params: Dict[str, Any]) -> Dict[str, Any]:
         "coal_seam_thickness": seam_thick,
         "coal_seam_depth": seam_depth,
         "dip_angle_deg": dip_angle,
+        "coal_in_place_tonnes": round(seam_thick * max(num_holes - 1, 1) * spacing * 100 * 1.4),
         "survey_stations": borehole_data,
     }
 
@@ -1352,6 +1418,7 @@ def generate_longwall_panel(params: Dict[str, Any]) -> Dict[str, Any]:
         {"name": "SHEARER", "color": 2, "description": "Coal shearer machine"},
         {"name": "GOAF", "color": 8, "description": "Caved goaf area"},
         {"name": "TEXT", "color": 7, "description": "Annotations"},
+        {"name": "DIMENSIONS", "color": 2, "description": "Panel dimensions"},
     ]
 
     primitives_2d.append(make_text(-20, face_w + 30, "UNDERGROUND LONGWALL MINING PANEL", 5.0, "TEXT", 7))
@@ -1367,6 +1434,9 @@ def generate_longwall_panel(params: Dict[str, Any]) -> Dict[str, Any]:
     # Current face position (mirrors the frontend: capped at 350 m)
     face_x = min(350.0, panel_l * 0.5)
     primitives_2d.append(make_line(face_x, 0, face_x, face_w, "LONGWALL-FACE", 1))
+    # Key-quantity annotations: face width + panel length
+    primitives_2d.append(make_dimension(face_x + 12, 0, face_x + 12, face_w, f"FACE {face_w:g} m", "DIMENSIONS"))
+    primitives_2d.append(make_dimension(0, -gate_w - 14, panel_l, -gate_w - 14, f"PANEL {panel_l:g} m", "DIMENSIONS"))
 
     # Goaf caved area behind face
     goaf_poly = [(0, 0), (face_x - 10, 0), (face_x - 10, face_w), (0, face_w)]
@@ -1421,6 +1491,7 @@ def generate_longwall_panel(params: Dict[str, Any]) -> Dict[str, Any]:
         "shearer_position": shearer_pos,
         "face_advance_m": face_x,
         "remaining_reserve_m": panel_l - face_x,
+        "recoverable_coal_tonnes": round(face_w * panel_l * seam_h * 1.4 * 0.95),
     }
 
     return {
@@ -1451,6 +1522,7 @@ def generate_cut_fill_volume(params: Dict[str, Any]) -> Dict[str, Any]:
         {"name": "CUT-AREA", "color": 1, "description": "Excavation cut volume"},
         {"name": "FILL-AREA", "color": 5, "description": "Backfill / Waste dump volume"},
         {"name": "TEXT", "color": 7, "description": "Volumetric Data Table"},
+        {"name": "DIMENSIONS", "color": 2, "description": "Cut depth"},
     ]
 
     primitives_2d.append(make_text(-10, pit_d + 30, "CUT & FILL VOLUMETRIC CROSS SECTION", 5.0, "TEXT", 7))
@@ -1488,6 +1560,9 @@ def generate_cut_fill_volume(params: Dict[str, Any]) -> Dict[str, Any]:
     primitives_2d.append(make_text(surf_w + 20, 2, f"Total Cut Volume: {cut_vol_m3:,.0f} m³", 2.4, "TEXT", 1))
     primitives_2d.append(make_text(surf_w + 20, -6, f"Total Excavation Tonnage: {cut_tonnes:,.0f} Tonnes", 2.4, "TEXT", 1))
     primitives_2d.append(make_text(surf_w + 20, -14, f"Estimated Fill Volume: {fill_vol_m3:,.0f} m³", 2.2, "TEXT", 5))
+    # Cut-depth dimension + spoil-dump wedge volume
+    primitives_2d.append(make_dimension(-14, -pit_d, -14, 0, f"CUT {pit_d:g} m", "DIMENSIONS"))
+    spoil_vol_m3 = 0.5 * 55 * 16 * strike_len
     primitives_2d.append(make_text(surf_w + 20, -22, f"Stripping Ratio: {cut_vol_m3 / (cut_tonnes/3.5 + 0.1):.2f} m³/t", 2.2, "TEXT", 3))
 
     # 3D: excavation prism extruded from the same cross-section polygon as the
@@ -1519,6 +1594,7 @@ def generate_cut_fill_volume(params: Dict[str, Any]) -> Dict[str, Any]:
         "cut_volume_m3": round(cut_vol_m3, 2),
         "cut_tonnes": round(cut_tonnes, 2),
         "fill_volume_m3": round(fill_vol_m3, 2),
+        "spoil_volume_m3": round(spoil_vol_m3),
         "stripping_ratio": round(cut_vol_m3 / (cut_tonnes/3.5 + 0.1), 2),
     }
 

@@ -94,6 +94,8 @@ class GenerateResponse(BaseModel):
     params: Dict[str, Any] = {}
     geometry: Dict[str, Any] = {}
     parse_method: str = ""
+    interpretation: str = ""
+    notes: List[str] = Field(default_factory=list)
     error: str = ""
 
 
@@ -158,6 +160,14 @@ def generate_from_prompt(req: GenerateRequest):
         params = parsed.get("params", {})
         method = parsed.get("method", "local")
 
+        # v2 parser extras — fall back to a locally-built interpretation for
+        # LLM parses (which don't produce one themselves)
+        notes = parsed.get("notes") or []
+        interpretation = parsed.get("interpretation") or ""
+        if not interpretation:
+            from parser import build_interpretation
+            interpretation = build_interpretation(object_type, params)
+
         # Generate geometry
         geometry = generate_geometry(object_type, params)
 
@@ -170,6 +180,8 @@ def generate_from_prompt(req: GenerateRequest):
             params=params,
             geometry=geometry,
             parse_method=method,
+            interpretation=interpretation,
+            notes=notes,
         )
 
     except ValueError as e:

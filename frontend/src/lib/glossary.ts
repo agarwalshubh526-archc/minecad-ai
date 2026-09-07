@@ -85,8 +85,8 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   extraction_ratio: {
     term: 'Extraction ratio',
-    definition: 'Percentage of the ore/coal actually recovered — the rest stays behind as pillars. Higher = more profit but more roof-risk.',
-    typical: '50–70%',
+    definition: 'Percentage of coal actually mined out of the panel, calculated as 1 − (pillar width ÷ room+pillar pitch)². Higher = more profit but more load on the remaining pillars.',
+    typical: '40–70% in room & pillar',
   },
   num_airways: {
     term: 'Number of airways',
@@ -377,6 +377,57 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     term: 'Belt speed',
     definition: 'How fast the conveyor belt travels, in metres per second.',
     typical: '2.5–6 m/s',
+  },
+  // ─── v2 computed engineering fields (read-only properties) ────────────────
+  waste_tonnes: {
+    term: 'Waste rock tonnage',
+    definition: 'Estimated in-situ tonnes of waste rock that must be drilled and hauled to open the pit, from the bench-shell volume × ~2.7 t/m³.',
+    typical: 'Waste rock ≈ 2.6–2.8 t/m³',
+  },
+  coal_tonnes_in_situ: {
+    term: 'Coal in situ',
+    definition: 'Tonnage of coal inside the rooms you designed (before any losses), at ~1.4 t/m³ typical for bituminous coal.',
+    typical: 'Coal ≈ 1.3–1.5 t/m³',
+  },
+  recoverable_coal_tonnes: {
+    term: 'Recoverable coal',
+    definition: 'Coal the longwall can actually extract: face × panel × seam height × density × ~95% recovery (a little always stays behind).',
+    typical: 'Longwall recovery ≈ 90–97%',
+  },
+  spacing_burden_ratio: {
+    term: 'Spacing/burden ratio',
+    definition: 'Spacing divided by burden — the single most important blast geometry ratio. Too low wastes explosives, too high leaves toes and boulders.',
+    typical: '1.0–1.4 for production blasts',
+  },
+  muck_volume_loose_m3: {
+    term: 'Loose muck volume',
+    definition: 'Volume of the blasted pile after it swells, using a ~1.3 swell factor. Trucks are rated in loose cubic metres, so size your fleet from this.',
+    typical: 'Swell factor ≈ 1.2–1.5',
+  },
+  estimated_airflow_m3s: {
+    term: 'Estimated airflow',
+    definition: 'Air quantity the shaft can carry at a typical 5 m/s velocity (shaft area × velocity). Real networks are sized from resistance and fan curves.',
+    typical: 'Shaft velocity ≈ 4–8 m/s',
+  },
+  vertical_lift_m: {
+    term: 'Vertical lift',
+    definition: 'How high the conveyor raises material: length × tan(inclination). Every extra metre of lift costs drive power.',
+    typical: 'Belts usually climb ≤ 18° (≈16° for coal)',
+  },
+  vertical_drop_m: {
+    term: 'Vertical drop',
+    definition: 'Total depth the decline reaches: length × gradient. Check your pumps can lift water from this depth.',
+    typical: 'Decline gradients 1:7–1:10 (10–14%)',
+  },
+  coal_in_place_tonnes: {
+    term: 'Coal in place (boreholes)',
+    definition: 'Tonnage of seam coal under the drill line, per 100 m of strike length, from seam thickness × spacing × strike × ~1.4 t/m³.',
+    typical: 'Coal ≈ 1.3–1.5 t/m³',
+  },
+  spoil_volume_m3: {
+    term: 'Spoil dump volume',
+    definition: 'Volume of the waste-dump wedge beside the cut, used to check you have somewhere to put the spoil.',
+    typical: 'Dumps are typically built in 10–20 m lifts',
   },
 };
 

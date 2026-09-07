@@ -74,6 +74,138 @@ def test_non_edit_returns_none():
     assert parse_edit_command("create an open pit mine", {"bench_height": 10}) is None
 
 
+# ─── Parser v2: units, synonyms, multi-step, relative adjectives ────────────
+
+@pytest.mark.parametrize("prompt,expected_type", [
+    ("dig a quarry with 4 benches", "open_pit"),
+    ("design an opencast coal mine", "open_pit"),
+    ("open cut gold mine 300m long", "open_pit"),
+    ("bord and pillar coal mine", "room_and_pillar"),
+    ("drive a tunnel 500m long", "decline"),
+    ("sink a shaft 6m diameter", "decline"),
+    ("blast design for the north wall", "blast_pattern"),
+    ("draw the topo of the site", "topographic_contours"),
+    ("contours of the site", "topographic_contours"),
+    ("check the airflow circuit", "ventilation"),
+    ("ventilation on level 3", "ventilation"),
+    ("a borehole cross section", "borehole_lithology"),
+    ("drill hole through the seam", "borehole_lithology"),
+    # specific design object beats generic open_pit context word "quarry"
+    ("blast pattern for a quarry", "blast_pattern"),
+    ("quarry blast design 10m burden", "blast_pattern"),
+])
+def test_synonym_type_extraction(prompt, expected_type):
+    assert parse_prompt_local(prompt)["object_type"] == expected_type
+
+
+def test_feet_conversion():
+    result = parse_prompt_local("opencast mine 40 ft deep")
+    # 40 ft = 12.19 m → 12.19 / 10 m benches ≈ 1 bench
+    assert result["params"]["num_benches"] == 1
+    assert any("ft" in n for n in result["notes"])
+
+
+def test_explicit_units_metres():
+    result = parse_prompt_local("open pit with 6 benches 15 metres high")
+    assert result["params"]["num_benches"] == 6
+    assert result["params"]["bench_height"] == 15
+
+
+def test_degrees_and_percent():
+    result = parse_prompt_local("open pit with 55 degrees overall slope")
+    assert result["params"]["overall_slope"] == 55
+    result2 = parse_prompt_local("decline with 12% gradient")
+    assert result2["object_type"] == "decline"
+    assert result2["params"]["gradient"] == 12
+
+
+def test_haul_road_ft_conversion():
+    result = parse_prompt_local("open pit with an 80 ft haul road")
+    assert abs(result["params"]["haul_road_width"] - 24.38) < 0.01
+
+
+def test_multi_step_haul_road():
+    result = parse_prompt_local("create an open pit with 5 benches and add a haul road")
+    assert result["object_type"] == "open_pit"
+    assert result["params"]["num_benches"] == 5
+    assert "haul_road" in result["features"]
+    assert any("haul road" in n for n in result["notes"])
+
+
+def test_multi_step_width_applies():
+    result = parse_prompt_local("create an open pit and add a 30 m haul road")
+    assert result["params"]["haul_road_width"] == 30
+
+
+def test_multi_step_unmodelled_feature_noted():
+    result = parse_prompt_local("design an open pit with a sump and drainage")
+    assert result["object_type"] == "open_pit"
+    assert any("drainage" in n for n in result["notes"])
+
+
+def test_interpretation_open_pit():
+    result = parse_prompt_local("open pit with 5 benches 12m high batter 55 degrees")
+    interp = result["interpretation"]
+    assert "open pit" in interp
+    assert "5 benches" in interp
+    assert "55°" in interp
+
+
+def test_interpretation_notes_unit_conversion():
+    result = parse_prompt_local("quarry 50 ft deep")
+    assert "ft →" in result["interpretation"]
+
+
+# ─── Relative adjectives (edit commands without numbers) ────────────────────
+
+def test_deeper_open_pit():
+    out = parse_edit_command("make it deeper", {"_object_type": "open_pit", "num_benches": 4})
+    assert out["num_benches"] == 5  # +25% of 4 = 1
+
+
+def test_deeper_cut_fill():
+    out = parse_edit_command("deeper", {"_object_type": "cut_fill_volume", "pit_depth": 40})
+    assert out["pit_depth"] == 50
+
+
+def test_wider_open_pit():
+    out = parse_edit_command("make the pit wider", {"_object_type": "open_pit", "pit_width": 200})
+    assert out["pit_width"] == 250
+
+
+def test_bigger_and_smaller():
+    props = {"_object_type": "open_pit", "pit_length": 300, "pit_width": 200}
+    out = parse_edit_command("bigger", props)
+    assert out["pit_length"] == 375 and out["pit_width"] == 250
+    out2 = parse_edit_command("smaller", props)
+    assert out2["pit_length"] == 240 and out2["pit_width"] == 160
+
+
+def test_steeper_and_gentler():
+    props = {"_object_type": "open_pit", "batter_angle": 75, "overall_slope": 50}
+    out = parse_edit_command("steeper walls", props)
+    assert out["batter_angle"] == 80 and out["overall_slope"] == 53
+    out2 = parse_edit_command("gentler slope", props)
+    assert out2["batter_angle"] == 70 and out2["overall_slope"] == 47
+
+
+def test_more_fewer_benches():
+    props = {"_object_type": "open_pit", "num_benches": 5}
+    assert parse_edit_command("more benches", props)["num_benches"] == 7
+    assert parse_edit_command("fewer benches", props)["num_benches"] == 3
+    # floors at 1
+    assert parse_edit_command("fewer benches", {"num_benches": 1})["num_benches"] == 1
+
+
+def test_more_levels():
+    out = parse_edit_command("add more levels", {"_object_type": "decline", "num_levels": 3})
+    assert out["num_levels"] == 5
+
+
+def test_relative_no_match_returns_none():
+    assert parse_edit_command("hello world", {"num_benches": 4}) is None
+
+
 # ─── SSRF whitelist helper ───────────────────────────────────────────────────
 
 @pytest.mark.parametrize("url", [

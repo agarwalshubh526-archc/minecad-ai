@@ -13,6 +13,7 @@ import PromptBox from '@/components/PromptBox';
 import * as apiClient from '@/lib/apiClient';
 import * as clientGeometry from '@/lib/geometryEngine';
 import { exportPDF } from '@/lib/pdfExport';
+import { buildSheetFrame } from '@/lib/sheetFrame';
 import LegalFooter from '@/components/LegalFooter';
 import OnboardingTour from '@/components/OnboardingTour';
 
@@ -30,6 +31,10 @@ export default function Home() {
     apiKey: '',
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  // v2 parser confirmation note shown in PromptBox (auto-dismisses there)
+  const [parseNote, setParseNote] = useState<{ id: number; text: string } | null>(null);
+  // AutoCAD-style drawing sheet around the 2D view (default ON)
+  const [sheetMode, setSheetMode] = useState(true);
   const [viewMode3D, setViewMode3D] = useState<'solid' | 'wireframe'>('solid');
   const [showSectionView, setShowSectionView] = useState(false);
   const [sectionHeight, setSectionHeight] = useState(0);
@@ -140,6 +145,9 @@ export default function Home() {
               ...prev,
               `Success: AI generated geometry. Parse method: ${res.parse_method}`,
             ]);
+            if (res.interpretation) {
+              setParseNote({ id: Date.now(), text: res.interpretation });
+            }
           } else {
             throw new Error(res.error);
           }
@@ -164,59 +172,21 @@ export default function Home() {
             ...prev,
             'System: Fallback to client-side geometry parser completed.',
           ]);
+          const interp = 'interpretation' in clientParsed && clientParsed.interpretation
+            ? clientParsed.interpretation
+            : clientGeometry.buildInterpretation(parsedType, parsedParams);
+          setParseNote({ id: Date.now(), text: interp });
         }
       } else {
-        // Run client-side parsing (local NLP rules)
-        // Check if edit command
-        let editProps: Record<string, unknown> | null = null;
-        const text = prompt.toLowerCase();
-        
-        // Simple edit checks in client
-        if (text.includes('increase') || text.includes('raise') || text.includes('set') || text.includes('change') || text.includes('reduce') || text.includes('decrease') || text.includes('add') || text.includes('remove')) {
-          const fieldMap: Record<string, string> = {
-            'height': 'bench_height', 'width': 'bench_width', 'haul road': 'haul_road_width', 'slope': 'overall_slope', 'burden': 'burden', 'spacing': 'spacing', 'pillar': 'pillar_width', 'room': 'room_width'
-          };
-          const matches = text.match(/(\d+\.?\d*)/);
-          const val = matches ? parseFloat(matches[1]) : null;
-
-          const updated = { ...activeProps };
-          let changed = false;
-
-          for (const [kw, field] of Object.entries(fieldMap)) {
-            if (text.includes(kw) && val !== null) {
-              updated[field] = val;
-              changed = true;
-            }
-          }
-
-          if (text.includes('add') && text.includes('bench')) {
-            updated.num_benches = (Number(updated.num_benches) || 5) + 1;
-            changed = true;
-          }
-          if (text.includes('remove') && text.includes('bench')) {
-            updated.num_benches = Math.max(1, (Number(updated.num_benches) || 5) - 1);
-            changed = true;
-          }
-          if (text.includes('add') && text.includes('level')) {
-            updated.num_levels = (Number(updated.num_levels) || 4) + 1;
-            changed = true;
-          }
-          if (text.includes('remove') && text.includes('level')) {
-            updated.num_levels = Math.max(1, (Number(updated.num_levels) || 4) - 1);
-            changed = true;
-          }
-
-          if (changed) {
-            editProps = updated;
-          }
-        }
-
+        // Run client-side parsing (local NLP rules, v2 — parity with backend)
+        const editProps = clientGeometry.parseEditCommand(prompt, activeProps);
         if (editProps) {
           parsedParams = editProps;
         } else {
           const clientParsed = clientGeometry.parsePromptLocal(prompt);
           parsedType = clientParsed.object_type ?? activeType;
           parsedParams = { ...activeProps, ...clientParsed.params };
+          setParseNote({ id: Date.now(), text: clientParsed.interpretation });
         }
 
         geom = clientGeometry.generateGeometry(parsedType, parsedParams);
@@ -531,11 +501,26 @@ export default function Home() {
     if (!geometry) return;
     setCommandHistory((prev) => [...prev, `System: Formatting and generating ${format.toUpperCase()} export file...`]);
 
+    // Drawing-sheet chrome (frame, title block, north arrow, scale bar) is
+    // included in the 2D vector exports when sheet mode is ON.
+    let exportGeom = geometry;
+    if (sheetMode && (format === 'svg' || format === 'pdf')) {
+      const frame = buildSheetFrame(geometry, {
+        projectName: selectedProject?.name ?? 'Untitled',
+        objectType: selectedProject?.object_type ?? '',
+      });
+      exportGeom = {
+        ...geometry,
+        primitives: [...geometry.primitives, ...frame.primitives],
+        bounds: frame.bounds,
+      };
+    }
+
     try {
       if (aiConfig.provider !== 'local') {
         // Try backend export first
         try {
-          const blob = await apiClient.exportFile(format, geometry);
+          const blob = await apiClient.exportFile(format, exportGeom);
           apiClient.downloadBlob(blob, `minecad_export.${format}`);
           setCommandHistory((prev) => [...prev, `Success: Exported minecad_export.${format} via backend.`]);
           return;
@@ -554,7 +539,7 @@ export default function Home() {
         apiClient.downloadText(data, 'minecad_export.stl', 'application/octet-stream');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.stl (client-side).']);
       } else if (format === 'svg') {
-        const data = clientGeometryExporterSVG(geometry);
+        const data = clientGeometryExporterSVG(exportGeom);
         apiClient.downloadText(data, 'minecad_export.svg', 'image/svg+xml');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.svg (client-side).']);
       } else if (format === 'dxf') {
@@ -562,7 +547,7 @@ export default function Home() {
         apiClient.downloadText(data, 'minecad_export.dxf', 'application/dxf');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.dxf (client-side).']);
       } else if (format === 'pdf') {
-        const blob = exportPDF(geometry);
+        const blob = exportPDF(exportGeom);
         apiClient.downloadBlob(blob, 'minecad_export.pdf');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.pdf (client-side).']);
       } else {
@@ -766,6 +751,8 @@ export default function Home() {
         aiConfig={aiConfig}
         setAiConfig={setAiConfig}
         isGenerating={isGenerating}
+        sheetMode={sheetMode}
+        setSheetMode={setSheetMode}
       />
 
       {/* Main workspace layout */}
@@ -812,6 +799,9 @@ export default function Home() {
                 geometry={geometry}
                 layers={layers}
                 fitKey={selectedProject ? `${selectedProject.id}:${selectedProject.object_type}` : null}
+                sheetMode={sheetMode}
+                sheetProjectName={selectedProject?.name ?? 'Untitled'}
+                sheetObjectType={selectedProject?.object_type ?? ''}
               />
             ) : (
               <Viewport3D
@@ -834,6 +824,7 @@ export default function Home() {
           <PromptBox
             onGenerate={handleGeneratePrompt}
             isGenerating={isGenerating}
+            note={parseNote}
           />
         </div>
 

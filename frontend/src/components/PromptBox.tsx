@@ -5,6 +5,8 @@ import React from 'react';
 interface PromptBoxProps {
   onGenerate: (prompt: string) => void;
   isGenerating: boolean;
+  /** v2 parser confirmation — "Understood: open pit — 5 benches × 12 m …" */
+  note?: { id: number; text: string } | null;
 }
 
 const EXAMPLES = [
@@ -26,8 +28,19 @@ const QUICK_CHIPS = [
   'blast pattern for a quarry',
 ];
 
-export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) {
+export default function PromptBox({ onGenerate, isGenerating, note = null }: PromptBoxProps) {
   const [prompt, setPrompt] = React.useState('');
+  const [dismissedId, setDismissedId] = React.useState<number | null>(null);
+
+  // Auto-dismiss the interpretation note after 4 s (keyed by note.id so a new
+  // parse re-arms the timer)
+  React.useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setDismissedId(note.id), 4000);
+    return () => clearTimeout(t);
+  }, [note]);
+
+  const visibleNote = note && note.id !== dismissedId ? note : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +52,21 @@ export default function PromptBox({ onGenerate, isGenerating }: PromptBoxProps) 
 
   return (
     <div className="bg-[#161b22] border-t border-[#30363d] p-3 md:p-4 flex flex-col gap-3">
+      {/* Parser interpretation confirmation (v2) */}
+      {visibleNote && (
+        <div
+          key={visibleNote.id}
+          className="flex items-start gap-2 bg-[#052e16] border border-[#238636]/60 rounded-lg px-3 py-2 text-[11px] font-mono text-[#3fb950]"
+          role="status"
+        >
+          <span className="shrink-0">✓</span>
+          <span>
+            <span className="text-[#8b949e]">Understood: </span>
+            {visibleNote.text}
+          </span>
+        </div>
+      )}
+
       {/* One-tap suggestion chips */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {QUICK_CHIPS.map((chip) => (

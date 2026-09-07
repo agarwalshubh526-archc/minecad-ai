@@ -117,6 +117,10 @@ export interface GenerateResponse {
   params: Record<string, unknown>;
   geometry: GeometryData;
   parse_method: string;
+  /** v2 parser: human-readable "Understood: …" summary */
+  interpretation?: string;
+  /** v2 parser: unit conversions and carried secondary features */
+  notes?: string[];
   error: string;
 }
 

@@ -41,12 +41,17 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
       const hrw = num(props, 'haul_road_width', 22);
       const slope = num(props, 'overall_slope', 55);
       const batter = num(props, 'batter_angle', 75);
+      const wasteTonnes = num(props, 'waste_tonnes', 0);
+      const wasteLine = wasteTonnes > 0
+        ? `Opening this pit moves ≈${(wasteTonnes / 1e6).toFixed(1)} Mt of waste rock (at ~2.7 t/m³) before any ore is reached.`
+        : '';
       return [
         {
           title: 'What you are looking at',
           points: [
             `A surface (open pit) mine seen from above — each smaller rectangle inside is one bench (step) dug deeper than the last.`,
             `Your pit is ${nb} benches deep × ${bh} m each = ${(nb * bh).toFixed(0)} m total depth.`,
+            wasteLine,
             glossaryLine('bench_height') ?? '',
           ].filter(Boolean),
         },
@@ -80,12 +85,14 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
       const rx = num(props, 'num_rooms_x', 5);
       const ry = num(props, 'num_rooms_y', 4);
       const ex = num(props, 'extraction_ratio', 0);
+      const coalT = num(props, 'coal_tonnes_in_situ', 0);
       return [
         {
           title: 'What you are looking at',
           points: [
             `An underground "room and pillar" mine: most of the coal/ore is dug out (the rooms) while square pillars of rock are left behind to hold up the roof.`,
             `Your panel has ${rx} × ${ry} = ${rx * ry} rooms.`,
+            coalT > 0 ? `The rooms hold ≈${(coalT / 1000).toFixed(0)} kt of coal in situ (at ~1.4 t/m³).` : '',
             glossaryLine('room_width') ?? '',
           ],
         },

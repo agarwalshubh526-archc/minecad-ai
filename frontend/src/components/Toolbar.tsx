@@ -17,6 +17,8 @@ interface ToolbarProps {
   aiConfig: AIConfig;
   setAiConfig: (c: AIConfig) => void;
   isGenerating: boolean;
+  sheetMode?: boolean;
+  setSheetMode?: (v: boolean) => void;
 }
 
 export default function Toolbar({
@@ -27,6 +29,7 @@ export default function Toolbar({
   geometry, onExport,
   aiConfig, setAiConfig,
   isGenerating,
+  sheetMode = false, setSheetMode,
 }: ToolbarProps) {
   const [showAiSettings, setShowAiSettings] = React.useState(false);
 
@@ -55,6 +58,20 @@ export default function Toolbar({
           3D
         </button>
       </div>
+
+      {/* 2D Drawing Sheet toggle */}
+      {activeView === '2d' && setSheetMode && (
+        <div className="flex items-center gap-1 mr-2 pl-2 border-l border-[#30363d] shrink-0">
+          <button
+            className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${sheetMode ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+            onClick={() => setSheetMode(!sheetMode)}
+            title="Toggle AutoCAD-style drawing sheet (frame, title block, north arrow, scale bar, legend)"
+          >
+            <span className="md:hidden">📜</span>
+            <span className="hidden md:inline">Sheet</span>
+          </button>
+        </div>
+      )}
 
       {/* 3D View controls */}
       {activeView === '3d' && (

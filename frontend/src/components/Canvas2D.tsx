@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import type { GeometryData, LayerInfo } from '@/types';
+import type { GeometryData, LayerInfo, CadPrimitive } from '@/types';
 import { dxfColor } from '@/types';
+import { buildSheetFrame, SHEET_LAYER } from '@/lib/sheetFrame';
 
 interface Canvas2DProps {
   geometry: GeometryData | null;
@@ -10,9 +11,13 @@ interface Canvas2DProps {
   onSelectObject?: (index: number) => void;
   // Identifies the project/type being viewed; a change triggers an auto-fit
   fitKey?: string | null;
+  // AutoCAD-style drawing sheet (frame, title block, north arrow, grid labels)
+  sheetMode?: boolean;
+  sheetProjectName?: string;
+  sheetObjectType?: string;
 }
 
-export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DProps) {
+export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = false, sheetProjectName = 'Untitled', sheetObjectType = '' }: Canvas2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -22,6 +27,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
 
   const [activeTool, setActiveTool] = useState<'pan' | 'coordinate' | 'distance' | 'area'>('pan');
   const [measurePoints, setMeasurePoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [legendOpen, setLegendOpen] = useState(true);
 
   // Latest cursor world position (readable from throttled/rAF contexts)
   const cursorWorldRef = useRef({ x: 0, y: 0 });
@@ -39,6 +45,16 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
   const visibleLayers = useMemo(
     () => new Set(layers.filter(l => l.visible).map(l => l.name)),
     [layers],
+  );
+
+  // Drawing-sheet frame primitives (world space, shared with SVG/PDF exports).
+  // Text metrics are derived from the live zoom so the canvas's minimum-font
+  // clamp cannot squash the title-block layout.
+  const sheetFrame = useMemo(
+    () => (sheetMode && geometry
+      ? buildSheetFrame(geometry, { projectName: sheetProjectName, objectType: sheetObjectType }, transform.scale)
+      : null),
+    [sheetMode, geometry, sheetProjectName, sheetObjectType, transform.scale],
   );
 
   const draw = useCallback(() => {
@@ -77,6 +93,24 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
       ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
     }
 
+    // Grid edge tick labels (sheet mode): world easting along the top,
+    // world northing along the left, at the current grid step.
+    if (sheetMode && geometry) {
+      const decimals = gridSize < 1 ? 1 : 0;
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#6e7681';
+      ctx.textAlign = 'center';
+      for (let gx = startX; gx < w; gx += gridScale) {
+        const worldX = (gx - w / 2 - tx) / scale;
+        ctx.fillText(worldX.toFixed(decimals), gx, 12);
+      }
+      ctx.textAlign = 'left';
+      for (let gy = startY; gy < h; gy += gridScale) {
+        const worldY = -(gy - h / 2 - ty) / scale;
+        ctx.fillText(worldY.toFixed(decimals), 4, gy + 3);
+      }
+    }
+
     // Origin crosshair
     const ox = w / 2 + tx;
     const oy = h / 2 + ty;
@@ -105,9 +139,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    for (const prim of geometry.primitives) {
-      if (!visibleLayers.has(prim.layer) && !visibleLayers.has('*')) continue;
-
+    const drawPrim = (prim: CadPrimitive) => {
       const color = dxfColor(prim.color);
 
       if (prim.type === 'line') {
@@ -120,7 +152,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
         ctx.lineTo(sx2, sy2);
         ctx.stroke();
       } else if (prim.type === 'polyline') {
-        if (prim.points.length < 2) continue;
+        if (prim.points.length < 2) return;
         ctx.strokeStyle = color;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -149,7 +181,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
         ctx.arc(scx, scy, Math.max(1, sr), -prim.endAngle * Math.PI / 180, -prim.startAngle * Math.PI / 180);
         ctx.stroke();
       } else if (prim.type === 'hatch') {
-        if (prim.points.length < 3) continue;
+        if (prim.points.length < 3) return;
         ctx.fillStyle = color + '25';
         ctx.strokeStyle = color + '60';
         ctx.lineWidth = 0.8;
@@ -185,7 +217,19 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.fillText(prim.text, (sx1 + sx2) / 2, (sy1 + sy2) / 2 - 4);
       }
+    };
+
+    for (const prim of geometry.primitives) {
+      if (!visibleLayers.has(prim.layer) && !visibleLayers.has('*')) continue;
+      drawPrim(prim);
     }
+    // Sheet frame bypasses the layer-visibility filter — it is chrome, not data
+    if (sheetFrame) {
+      for (const prim of sheetFrame.primitives) drawPrim(prim);
+    }
+
+    // (No screen-space scale bar in sheet mode: the sheet frame draws its own
+    // world-space bar in the bottom margin, so it appears in exports too.)
 
     // Draw Active Interactive Measurement Tool Renderings
     if (measurePoints.length > 0) {
@@ -281,16 +325,18 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
       }
     }
 
-  }, [geometry, transform, visibleLayers, measurePoints, activeTool]);
+  }, [geometry, transform, visibleLayers, measurePoints, activeTool, sheetFrame, sheetMode]);
 
   useEffect(() => {
     draw();
   }, [draw]);
 
-  // Fit view bounds
+  // Fit view bounds — in sheet mode the frame is part of the drawing, so
+  // extents include it (otherwise the title block/scale bar fall outside
+  // the fitted view)
   const fitView = useCallback(() => {
     if (!geometry || !canvasRef.current) return;
-    const { bounds } = geometry;
+    const bounds = (sheetMode && sheetFrame) ? sheetFrame.bounds : geometry.bounds;
     const w = bounds.maxX - bounds.minX;
     const h = bounds.maxY - bounds.minY;
     if (w <= 0 || h <= 0) return;
@@ -309,21 +355,24 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
       x: -centerX * scale,
       y: centerY * scale,
     });
-  }, [geometry]);
+  }, [geometry, sheetMode, sheetFrame]);
 
   // Auto-fit only on first load / when the project or object type changes.
   // Regenerations of the same project keep the current view unless the user
-  // hasn't panned/zoomed since the last fit.
+  // hasn't panned/zoomed since the last fit. Toggling the sheet re-fits so
+  // the frame is fully in view.
+  const lastSheetMode = useRef(sheetMode);
   useEffect(() => {
     if (!geometry) return;
-    if (fitKey !== lastFitKey.current) {
+    if (fitKey !== lastFitKey.current || sheetMode !== lastSheetMode.current) {
       lastFitKey.current = fitKey;
+      lastSheetMode.current = sheetMode;
       hasUserTransformed.current = false;
       fitView();
     } else if (!hasUserTransformed.current) {
       fitView();
     }
-  }, [geometry, fitKey, fitView]);
+  }, [geometry, fitKey, fitView, sheetMode]);
 
   // Clear stale measure points when the geometry changes
   const prevGeometryRef = useRef(geometry);
@@ -589,6 +638,33 @@ export default function Canvas2D({ geometry, layers, fitKey = null }: Canvas2DPr
           </button>
         )}
       </div>
+
+      {/* Legend (sheet mode) — below the tool bar, collapsible */}
+      {sheetMode && geometry && (
+        <div className="absolute left-3 bg-[#161b22]/95 border border-[#30363d] rounded-lg z-30 shadow-xl font-mono text-[10px] max-w-44" style={{ top: 52 }}>
+          <button
+            onClick={() => setLegendOpen(!legendOpen)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[#8b949e] hover:text-white"
+            aria-label={legendOpen ? 'Collapse legend' : 'Expand legend'}
+          >
+            <span className="font-semibold tracking-wider">LEGEND</span>
+            <span>{legendOpen ? '▾' : '▸'}</span>
+          </button>
+          {legendOpen && (
+            <div className="px-2.5 pb-2 pt-0.5 space-y-1">
+              {layers.filter(l => l.name !== SHEET_LAYER).map(l => (
+                <div key={l.name} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-3 h-0 border-t-2 shrink-0"
+                    style={{ borderColor: dxfColor(l.color) }}
+                  />
+                  <span className="text-[#8b949e] truncate" title={l.description}>{l.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* North Compass Arrow Overlay */}
       <div className="absolute top-3 right-3 w-12 h-12 bg-[#161b22]/90 border border-[#30363d] rounded-full flex flex-col items-center justify-center pointer-events-none z-30 shadow-lg">

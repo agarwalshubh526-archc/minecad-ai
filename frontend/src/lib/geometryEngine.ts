@@ -359,7 +359,10 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
     }
     toeRects.push({ x1: tx1, y1: ty1, x2: tx2, y2: ty2 });
 
-    prims.push(text(cx2 + 5, (cy1 + cy2) / 2, `Bench ${i+1}`, 2, 'TEXT', 7));
+    // Stagger each label into the corridor just above the ring's top-left
+    // corner — the top-right holds the sheet's north arrow, and stacked on
+    // the centreline the labels overlap into an unreadable blob.
+    prims.push(text(cx1 - 12, cy2 + 4, `Bench ${i+1}`, 2, 'TEXT', 7));
   }
 
   const builtBenches = crestRects.length;
@@ -377,6 +380,13 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
   if (roadPts.length > 1) {
     prims.push(polyline(roadPts, false, 'HAUL-ROAD', 3));
     prims.push(polyline(roadPts2, false, 'HAUL-ROAD', 3));
+    // Key-quantity annotation: haul-road width + typical grade, placed at the
+    // bottom of the road where there is open space (top bench collides with
+    // the "Bench N" labels).
+    const rw = roadPts[0];
+    const rw2 = roadPts2[0];
+    prims.push(dimension(rw2[0], rw2[1] - 6, rw[0], rw[1] - 6, `HAUL ROAD ${haulRoadWidth} m`));
+    prims.push(text(rw[0] + 7, rw[1] + 5, 'GRADE ≈10%', 2, 'TEXT', 8));
   }
 
   // ── 3D stepped pit shell ──
@@ -448,6 +458,20 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
   }
   sectionPts.push([pitLength/2, sy]);
   prims.push(polyline(sectionPts, false, 'PIT-CREST', 1));
+  // Section annotations: bench height on the first bench, total depth overall
+  const benchX = sx + totalSetback + faceSetback;
+  prims.push(dimension(benchX + 8, sy - benchHeight, benchX + 8, sy, `BENCH ${benchHeight} m`));
+  prims.push(dimension(sx - 14, sy - builtBenches * benchHeight, sx - 14, sy, `DEPTH ${builtBenches * benchHeight} m`));
+
+  // Pit shell volume: rectangular-pyramid frustum per bench between crests
+  const rectArea = (r: PlanRect) => Math.max(0, (r.x2 - r.x1) * (r.y2 - r.y1));
+  let wasteVol = 0;
+  for (let i = 0; i < builtBenches; i++) {
+    const a1 = rectArea(crestRects[i]);
+    const a2 = i + 1 < builtBenches ? rectArea(crestRects[i + 1]) : rectArea(toeRects[builtBenches - 1]);
+    wasteVol += (benchHeight / 3) * (a1 + a2 + Math.sqrt(a1 * a2));
+  }
+  const wasteTonnes = wasteVol * 2.7; // waste rock ≈ 2.7 t/m³
 
   return {
     primitives: prims,
@@ -464,6 +488,8 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
       overall_slope: overallSlope,
       batter_angle: batterAngle,
       total_depth: numBenches * benchHeight,
+      waste_volume_m3: Math.round(wasteVol),
+      waste_tonnes: Math.round(wasteTonnes),
       _object_type: 'open_pit',
     },
     bounds: { minX: -pitLength/2 - 30, minY: -pitWidth/2 - 150, maxX: pitLength/2 + 30, maxY: pitWidth/2 + 50 },
@@ -515,6 +541,13 @@ export function generateRoomAndPillar(params: Record<string, number>): GeometryD
   prims.push(text(totalW / 2 - 10, ey + 1, 'MAIN ENTRY', 2, 'TEXT', 3));
   meshes.push(boxMesh(-10, ey, 0, totalW + 20, entryW, roomH, MINE_COLORS.roadwayGravel, 'ENTRY'));
 
+  // Key-quantity annotations: room width + pillar width on the first row,
+  // extraction ratio (standard formula: 1 − (pillar/cell)²)
+  const extraction = Math.round((1 - (pillarW ** 2) / (cellW ** 2)) * 1000) / 10;
+  prims.push(dimension(pillarW, -8, cellW, -8, `ROOM ${roomW} m`));
+  prims.push(dimension(0, -8, pillarW, -8, `PILLAR ${pillarW} m`));
+  prims.push(text(0, totalH + 12, `EXTRACTION RATIO ≈${extraction.toFixed(1)}%`, 2.5, 'TEXT', 2));
+
   // Floor and roof planes at consistent z (roof renders translucent in 3D so
   // the workings stay visible from above).
   meshes.push(boxMesh(-2, ey - 2, -0.6, totalW + 4, totalH - ey + 4, 0.6, MINE_COLORS.floorRock, 'FLOOR'));
@@ -525,7 +558,8 @@ export function generateRoomAndPillar(params: Record<string, number>): GeometryD
     properties: {
       name: 'Room & Pillar Mine', room_width: roomW, pillar_width: pillarW,
       num_rooms_x: numX, num_rooms_y: numY, room_height: roomH, entry_width: entryW,
-      extraction_ratio: Math.round((roomW**2) / ((roomW + pillarW)**2) * 1000) / 10,
+      extraction_ratio: extraction,
+      coal_tonnes_in_situ: Math.round(numX * numY * (cellW ** 2 - pillarW ** 2) * roomH * 1.4),
       _object_type: 'room_and_pillar',
     },
     bounds: { minX: -20, minY: ey - 30, maxX: totalW + 20, maxY: totalH + 40 },
@@ -554,7 +588,7 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
 
   prims.push(text(0, 80, 'VENTILATION NETWORK', 5, 'TEXT', 7));
   prims.push(circle(0, 0, shaftD, 'SHAFTS', 1));
-  prims.push(text(-8, -shaftD - 5, 'INTAKE SHAFT', 2, 'TEXT', 1));
+  prims.push(text(-8, -shaftD - 5, `INTAKE SHAFT Ø${shaftD} m`, 2, 'TEXT', 1));
   prims.push(circle(exX, 0, shaftD, 'SHAFTS', 1));
   prims.push(text(exX - 8, -shaftD - 5, 'EXHAUST SHAFT', 2, 'TEXT', 1));
 
@@ -562,6 +596,9 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
     const y = -spacing * (i + 1);
     prims.push(line(0, y, exX, y, 'AIRWAYS', 6));
     prims.push(text(exX / 2 - 5, y + 2, `Airway ${i+1}`, 1.5, 'TEXT', 6));
+    if (i === 0) {
+      prims.push(text(2, y - 4, `L=${airwayLen} m  v=5 m/s`, 1.8, 'TEXT', 8));
+    }
     // Duct just below surface level
     meshes.push(boxMesh(0, y - 1.5, -2.5, exX, 3, 3, MINE_COLORS.ductSteel, 'AIRWAYS'));
   }
@@ -589,6 +626,7 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
     properties: {
       name: 'Ventilation Network', num_airways: numAirways,
       airway_length: airwayLen, shaft_diameter: shaftD, fan_power_kw: fanPower,
+      estimated_airflow_m3s: Math.round(5 * Math.PI * (shaftD / 2) ** 2),
       _object_type: 'ventilation',
     },
     bounds: { minX: -30, minY: bottomY - 30, maxX: exX + 30, maxY: 80 },
@@ -651,6 +689,8 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
   const routeEndX = startX + routeDx;
   const routeEndY = startY + routeDy;
   const rise = actualLen * Math.tan(inclination * Math.PI / 180);
+  prims.push(text((startX + routeEndX) / 2, (startY + routeEndY) / 2 + 8,
+    `INCLINE ${inclination}° · RISE ${rise.toFixed(0)} m`, 2, 'TEXT', 2));
 
   // Belt: inclined box, carrying surface on top
   meshes.push(inclinedBoxMesh(startX, startY, 0, routeEndX, routeEndY, rise,
@@ -679,6 +719,7 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
     properties: {
       name: 'Conveyor Route', length: actualLen, width, inclination,
       start: [startX, startY], end: [endX, endY],
+      vertical_lift_m: Math.round(rise * 100) / 100,
       _object_type: 'conveyor',
     },
     bounds: { minX: Math.min(startX, endX) - 30, minY: Math.min(startY, endY) - 30,
@@ -726,13 +767,21 @@ export function generateBlastPattern(params: Record<string, unknown>): GeometryD
 
   prims.push(dimension(spacing/2, burden, spacing/2, burden * 2, `${burden} m`));
   prims.push(dimension(spacing/2, burden - 3, spacing/2 + spacing, burden - 3, `${spacing} m`));
+  // Blasting convention check: spacing/burden ratio ≈ 1.0–1.4 for production blasts
+  prims.push(text(totalWidth + 5, burden * (numRows + 1), `S/B = ${(spacing / burden).toFixed(2)}`, 2, 'TEXT', 2));
+  const totalHoles = numRows * numHoles;
+  const rockVolM3 = burden * spacing * holeDepth * totalHoles;
+  const muckVolLoose = rockVolM3 * 1.3; // swell factor
 
   return {
     primitives: prims, meshes, layers,
     properties: {
       name: 'Blast Pattern', burden, spacing, num_rows: numRows,
       num_holes_per_row: numHoles, hole_diameter: holeDiam,
-      hole_depth: holeDepth, pattern, total_holes: numRows * numHoles,
+      hole_depth: holeDepth, pattern, total_holes: totalHoles,
+      spacing_burden_ratio: Math.round((spacing / burden) * 100) / 100,
+      rock_volume_m3: Math.round(rockVolM3),
+      muck_volume_loose_m3: Math.round(muckVolLoose),
       _object_type: 'blast_pattern',
     },
     bounds: { minX: -10, minY: -15, maxX: totalWidth + 10, maxY: numRows * burden + 30 },
@@ -805,11 +854,17 @@ export function generateDecline(params: Record<string, number>): GeometryData {
   meshes.push(boxMesh(pts[0][0] - width / 2, pts[0][1] - width / 2, 0, width, width, height,
     MINE_COLORS.roadwayGravel, 'decline_portal', 'DECLINE'));
 
+  // Key-quantity annotations: gradient at the portal (1:7–1:10 is typical)
+  const ratio = gradient > 0 ? `1:${Math.round(100 / gradient)}` : 'level';
+  prims.push(text(pts[0][0] + 4, pts[0][1] + 6, `GRADIENT ${gradient}% (${ratio})`, 2.2, 'TEXT', 2));
+  prims.push(text(pts[0][0] + 4, pts[0][1] + 1, `VERTICAL DROP ${Math.round(totalLen * gradient / 100)} m`, 2.2, 'TEXT', 8));
+
   return {
     primitives: prims, meshes, layers,
     properties: {
       name: 'Decline Access', width, height, gradient,
       total_length: totalLen, num_levels: numLevels, level_spacing: levelSpacing,
+      vertical_drop_m: Math.round(totalLen * gradient) / 100,
       _object_type: 'decline',
     },
     bounds: { minX: -30, minY: -numLevels * levelSpacing - 30, maxX: segLen + 60, maxY: 60 },
@@ -864,6 +919,7 @@ export function generateMineSurveyTraverse(params: Record<string, unknown>): Geo
   const closureN = Number(((currN - startN) * 0.05).toFixed(3));
   const totalLen = numStations * avgDist;
   const precision = `1 : ${Math.floor(totalLen / (Math.sqrt(closureE**2 + closureN**2) + 0.001))}`;
+  prims.push(text(startE - 40, startN + 52, `TRAVERSE ${totalLen.toFixed(0)} m · PRECISION ${precision}`, 2.2, 'TEXT', 8));
 
   const ptsLoop: [number, number][] = stations.map(s => [s.easting, s.northing]);
   prims.push(polyline(ptsLoop, true, 'TRAVERSE-LINES', 4));
@@ -948,6 +1004,7 @@ export function generateTopographicContours(params: Record<string, unknown>): Ge
   ];
 
   prims.push(text(0, gridH / 2 + 25, 'TOPOGRAPHIC SURFACE & DTM CONTOUR MAP', 5.0, 'TEXT', 7));
+  prims.push(text(0, gridH / 2 + 17, `CONTOUR INTERVAL ${interval} m · RELIEF ${Math.round(maxZ - minZ)} m`, 2.2, 'TEXT', 8));
 
   const centerX = gridW * 0.4, centerY = gridH * 0.5;
   const numSteps = Math.min(Math.floor((maxZ - minZ) / interval), 500);
@@ -1041,6 +1098,7 @@ export function generateBoreholeLithology(params: Record<string, unknown>): Geom
     { name: 'OVERBURDEN', color: 2, description: 'Soil & weathered clay layer' },
     { name: 'COAL-SEAM', color: 7, description: 'Economic coal seam' },
     { name: 'TEXT', color: 7, description: 'Labels and depths' },
+    { name: 'DIMENSIONS', color: 2, description: 'Depth dimensions' },
   ];
 
   prims.push(text(-20, 50, 'GEOLOGICAL BOREHOLE & STRATIGRAPHY CROSS SECTION', 5.0, 'TEXT', 7));
@@ -1073,6 +1131,9 @@ export function generateBoreholeLithology(params: Record<string, unknown>): Geom
     prims.push(polyline([[hx - 3, hy], [hx + 3, hy], [hx, hy + 5]], true, 'BOREHOLE-COLLARS', 1));
     prims.push(text(hx - 8, hy + 8, `${bhName} (Collar 0.0m)`, 2.4, 'TEXT', 1));
     prims.push(text(hx + 5, seamTopY, `Coal Top: -${currSeamDepth.toFixed(1)}m`, 1.8, 'TEXT', 7));
+    if (i === 0) {
+      prims.push(dimension(hx - 12, bottomY, hx - 12, hy, `DEPTH ${totalDepth} m`));
+    }
 
     seamTopPts.push([hx, seamTopY]);
     seamBotPts.push([hx, seamBotY]);
@@ -1105,6 +1166,7 @@ export function generateBoreholeLithology(params: Record<string, unknown>): Geom
       coal_seam_thickness: seamThick,
       coal_seam_depth: seamDepth,
       dip_angle_deg: dipAngle,
+      coal_in_place_tonnes: Math.round(seamThick * Math.max(numHoles - 1, 1) * spacing * 100 * 1.4),
       survey_stations: stations,
     },
     bounds: { minX: -40, minY: -totalDepth - 20, maxX: maxXx, maxY: 60 },
@@ -1129,6 +1191,7 @@ export function generateLongwallPanel(params: Record<string, unknown>): Geometry
     { name: 'GATEROADS', color: 5, description: 'Headgate & Tailgate roadways' },
     { name: 'SHEARER', color: 2, description: 'Coal shearer machine' },
     { name: 'TEXT', color: 7, description: 'Annotations' },
+    { name: 'DIMENSIONS', color: 2, description: 'Panel dimensions' },
   ];
 
   prims.push(text(-20, faceW + 30, 'UNDERGROUND LONGWALL MINING PANEL', 5.0, 'TEXT', 7));
@@ -1141,6 +1204,9 @@ export function generateLongwallPanel(params: Record<string, unknown>): Geometry
   prims.push(line(faceX, 0, faceX, faceW, 'LONGWALL-FACE', 1));
   prims.push(circle(faceX, shearerPos, 4.0, 'SHEARER', 2));
   prims.push(text(faceX + 6, shearerPos, `Double-Drum Shearer (${shearerPos.toFixed(1)}m)`, 2.0, 'TEXT', 2));
+  // Key-quantity annotations: face width + panel length
+  prims.push(dimension(faceX + 12, 0, faceX + 12, faceW, `FACE ${faceW} m`));
+  prims.push(dimension(0, -gateW - 14, panelL, -gateW - 14, `PANEL ${panelL} m`));
 
   // 3D: gate roads, caved goaf, coal face, powered supports, shearer
   meshes.push(boxMesh(0, -gateW, 0, panelL, gateW, seamH, MINE_COLORS.gateroad, 'headgate_roadway', 'GATEROADS'));
@@ -1179,6 +1245,7 @@ export function generateLongwallPanel(params: Record<string, unknown>): Geometry
       shearer_position: shearerPos,
       face_advance_m: faceX,
       remaining_reserve_m: panelL - faceX,
+      recoverable_coal_tonnes: Math.round(faceW * panelL * seamH * 1.4 * 0.95),
     },
     bounds: { minX: -30, minY: -30, maxX: panelL + 30, maxY: faceW + 40 },
   };
@@ -1201,6 +1268,7 @@ export function generateCutFillVolume(params: Record<string, unknown>): Geometry
     { name: 'DESIGN-EXCAVATION', color: 4, description: 'Target pit slope profile' },
     { name: 'CUT-AREA', color: 1, description: 'Excavation cut volume' },
     { name: 'TEXT', color: 7, description: 'Volumetric Data Table' },
+    { name: 'DIMENSIONS', color: 2, description: 'Cut depth' },
   ];
 
   prims.push(text(-10, pitD + 30, 'CUT & FILL VOLUMETRIC CROSS SECTION', 5.0, 'TEXT', 7));
@@ -1226,6 +1294,8 @@ export function generateCutFillVolume(params: Record<string, unknown>): Geometry
   prims.push(text(surfW + 20, 10, `Cross Section Area: ${cutAreaM2.toFixed(1)} m²`, 2.2, 'TEXT', 4));
   prims.push(text(surfW + 20, 2, `Total Cut Volume: ${cutVolM3.toLocaleString()} m³`, 2.4, 'TEXT', 1));
   prims.push(text(surfW + 20, -6, `Total Excavation Tonnage: ${cutTonnes.toLocaleString()} Tonnes`, 2.4, 'TEXT', 1));
+  prims.push(dimension(-14, -pitD, -14, 0, `CUT ${pitD} m`));
+  const spoilVolM3 = 0.5 * 55 * 16 * strikeLen; // spoil-dump wedge
 
   // 3D: excavation prism extruded from the same cross-section polygon as the
   // 2D profile, plus a spoil-dump wedge on the downhill side.
@@ -1258,6 +1328,7 @@ export function generateCutFillVolume(params: Record<string, unknown>): Geometry
       cut_area_m2: Number(cutAreaM2.toFixed(2)),
       cut_volume_m3: Number(cutVolM3.toFixed(2)),
       cut_tonnes: Number(cutTonnes.toFixed(2)),
+      spoil_volume_m3: Math.round(spoilVolM3),
       stripping_ratio: Number((cutVolM3 / (cutTonnes/3.5 + 0.1)).toFixed(2)),
     },
     bounds: { minX: -40, minY: -pitD - 30, maxX: surfW + 140, maxY: pitD + 40 },
@@ -1330,57 +1401,11 @@ export function generateGeometry(objectType: string, params: Record<string, unkn
 }
 
 // ─── Local NLP Parser ───────────────────────────────────────────────────────
+// v2 parser lives in promptParser.ts (parity with backend/parser.py); it is
+// re-exported here so existing imports from geometryEngine keep working.
 
-const TYPE_PATTERNS: [RegExp, string][] = [
-  [/survey|traverse|station|boundary|lease|control\s*loop/i, 'mine_survey_traverse'],
-  [/contour|topography|topographic|elevation\s*map|dtm|surface\s*grid/i, 'topographic_contours'],
-  [/borehole|drillhole|stratigraphy|coal\s*seam|lithology|core/i, 'borehole_lithology'],
-  [/longwall|shearer|headgate|tailgate|chocks/i, 'longwall_panel'],
-  [/cut\s*and\s*fill|cut\s*fill|volume|volumetric|earthwork|stripping\s*ratio/i, 'cut_fill_volume'],
-  [/open\s*pit|pit\s*mine|surface\s*mine/i, 'open_pit'],
-  [/room\s*and\s*pillar|room\s*&\s*pillar|bord\s*and\s*pillar/i, 'room_and_pillar'],
-  [/ventilation|vent\s*network|airway/i, 'ventilation'],
-  [/conveyor|belt\s*system/i, 'conveyor'],
-  [/blast\s*(pattern|layout|design|hole)/i, 'blast_pattern'],
-  [/decline|ramp\s*access|portal|shaft/i, 'decline'],
-  [/haul\s*road/i, 'open_pit'],
-];
-
-const PARAM_PATTERNS: [RegExp, string][] = [
-  [/(\d+\.?\d*)\s*m?\s*bench\s*height/i, 'bench_height'],
-  [/bench\s*height\s*(?:of\s*)?(\d+\.?\d*)/i, 'bench_height'],
-  [/(\d+\.?\d*)\s*m?\s*bench\s*width/i, 'bench_width'],
-  [/bench\s*width\s*(?:of\s*)?(\d+\.?\d*)/i, 'bench_width'],
-  [/(\d+)\s*bench(?:es)?/i, 'num_benches'],
-  [/(\d+\.?\d*)\s*m?\s*haul\s*road/i, 'haul_road_width'],
-  [/haul\s*road\s*(?:width\s*)?(?:of\s*)?(\d+\.?\d*)/i, 'haul_road_width'],
-  [/(\d+\.?\d*)°?\s*(?:overall\s*)?slope/i, 'overall_slope'],
-  [/slope\s*(?:angle\s*)?(?:of\s*)?(\d+\.?\d*)/i, 'overall_slope'],
-  [/(\d+\.?\d*)\s*m?\s*(?:pit\s*)?length/i, 'pit_length'],
-  [/(\d+\.?\d*)\s*m?\s*(?:pit\s*)?width/i, 'pit_width'],
-  [/(\d+)\s*levels?/i, 'num_levels'],
-  [/(\d+\.?\d*)\s*m?\s*burden/i, 'burden'],
-  [/(\d+\.?\d*)\s*m?\s*spacing/i, 'spacing'],
-  [/(\d+)\s*rows?/i, 'num_rows'],
-  [/room\s*width\s*(?:of\s*)?(\d+\.?\d*)/i, 'room_width'],
-  [/pillar\s*(?:width|size)\s*(?:of\s*)?(\d+\.?\d*)/i, 'pillar_width'],
-];
-
-export function parsePromptLocal(prompt: string): { object_type: string | null; params: Record<string, number> } {
-  const text = prompt.toLowerCase();
-  let objectType: string | null = null;
-  for (const [re, type] of TYPE_PATTERNS) {
-    if (re.test(text)) { objectType = type; break; }
-  }
-  const params: Record<string, number> = {};
-  for (const [re, key] of PARAM_PATTERNS) {
-    const m = text.match(re);
-    if (m) {
-      params[key] = parseFloat(m[1]);
-    }
-  }
-  return { object_type: objectType, params };
-}
+export { parsePromptLocal, parseEditCommand, buildInterpretation } from './promptParser';
+export type { ParsedPrompt } from './promptParser';
 
 export async function parseWithDeepSeekClient(
   prompt: string,
