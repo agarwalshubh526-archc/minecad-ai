@@ -10,11 +10,11 @@ export default function PrivacyPage() {
   const effectiveDate = 'September 4, 2026';
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#e6edf3] font-sans">
+    <div className="min-h-screen bg-bg-base text-fg font-sans">
       {/* Header */}
-      <header className="border-b border-[#30363d] bg-[#161b22] sticky top-0 z-10">
+      <header className="border-b border-edge bg-surface-raised sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-[#58a6ff] hover:text-white transition-colors">
+          <Link href="/" className="flex items-center gap-2 text-info hover:text-white transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
@@ -29,12 +29,12 @@ export default function PrivacyPage() {
 
       <main className="max-w-4xl mx-auto px-6 py-12">
         <div className="mb-10">
-          <div className="inline-block bg-[#58a6ff]/10 border border-[#58a6ff]/30 text-[#58a6ff] text-xs font-mono px-3 py-1 rounded-full mb-4">
+          <div className="inline-block bg-info/10 border border-info/30 text-info text-xs font-mono px-3 py-1 rounded-full mb-4">
             Legal Document
           </div>
           <h1 className="text-3xl font-bold text-white mb-3">Privacy Policy</h1>
-          <p className="text-[#8b949e] text-sm font-mono">
-            Effective Date: <span className="text-[#58a6ff]">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
+          <p className="text-fg-muted text-sm font-mono">
+            Effective Date: <span className="text-info">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
           </p>
         </div>
 
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">01.</span> Introduction
+              <span className="text-info font-mono">01.</span> Introduction
             </h2>
             <p>
               MineCAD AI (&ldquo;we&rdquo;, &ldquo;our&rdquo;, &ldquo;us&rdquo;) is committed to protecting your privacy. This Privacy Policy
@@ -55,11 +55,11 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">02.</span> Information We Collect
+              <span className="text-info font-mono">02.</span> Information We Collect
             </h2>
 
             <div className="space-y-4">
-              <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
+              <div className="bg-surface-raised border border-edge rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2 text-sm">2.1 Information You Provide</h3>
                 <ul className="list-none space-y-2">
                   {[
@@ -69,14 +69,14 @@ export default function PrivacyPage() {
                     'Survey data or coordinates you input for mine traverse calculations',
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="text-[#58a6ff] mt-0.5">▸</span>
+                      <span className="text-info mt-0.5">▸</span>
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
+              <div className="bg-surface-raised border border-edge rounded-lg p-4">
                 <h3 className="text-white font-semibold mb-2 text-sm">2.2 Technical Information (Automatically Collected)</h3>
                 <ul className="list-none space-y-2">
                   {[
@@ -87,14 +87,14 @@ export default function PrivacyPage() {
                     'Session timing and feature usage frequency (anonymized)',
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="text-[#58a6ff] mt-0.5">▸</span>
+                      <span className="text-info mt-0.5">▸</span>
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="bg-[#0d1117] border border-[#238636]/40 rounded-lg p-4">
+              <div className="bg-bg-base border border-success/40 rounded-lg p-4">
                 <h3 className="text-[#3fb950] font-semibold mb-2 text-sm">✓ What We Do NOT Collect</h3>
                 <ul className="list-none space-y-2">
                   {[
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">03.</span> How We Use Your Information
+              <span className="text-info font-mono">03.</span> How We Use Your Information
             </h2>
             <p className="mb-3">We use the collected information to:</p>
             <ul className="list-none space-y-2 pl-4">
@@ -128,7 +128,7 @@ export default function PrivacyPage() {
                 'Detect and prevent abuse, fraud, or unauthorized API access',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-[#58a6ff] mt-0.5">▸</span>
+                  <span className="text-info mt-0.5">▸</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">04.</span> Data Retention
+              <span className="text-info font-mono">04.</span> Data Retention
             </h2>
             <p className="mb-3">
               MineCAD AI is designed with a <strong className="text-white">minimal data retention</strong> approach:
@@ -150,7 +150,7 @@ export default function PrivacyPage() {
                 'Anonymized aggregate usage statistics (feature counts, not content) may be retained indefinitely.',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-[#58a6ff] mt-0.5">▸</span>
+                  <span className="text-info mt-0.5">▸</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -159,23 +159,23 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">05.</span> Third-Party AI Providers &amp; Data Transfer
+              <span className="text-info font-mono">05.</span> Third-Party AI Providers &amp; Data Transfer
             </h2>
             <p className="mb-3">
               When you configure MineCAD AI to use a third-party AI provider, your prompts are transmitted
               directly to that provider&apos;s API. This data transfer is governed by that provider&apos;s privacy
               policy, not ours:
             </p>
-            <div className="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden">
+            <div className="bg-surface-raised border border-edge rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[#30363d]">
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Provider</th>
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Data Sent</th>
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Privacy Policy</th>
+                  <tr className="border-b border-edge">
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Provider</th>
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Data Sent</th>
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Privacy Policy</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#30363d]">
+                <tbody className="divide-y divide-edge">
                   {[
                     ['DeepSeek AI', 'Your prompt text', 'https://www.deepseek.com/privacy'],
                     ['Ollama (local)', 'Nothing – runs on your machine', 'N/A (local only)'],
@@ -187,7 +187,7 @@ export default function PrivacyPage() {
                       <td className="px-4 py-3 text-xs">
                         {link.startsWith('http') ? (
                           <a href={link} target="_blank" rel="noopener noreferrer"
-                             className="text-[#58a6ff] hover:underline">View Policy</a>
+                             className="text-info hover:underline">View Policy</a>
                         ) : (
                           <span className="text-[#3fb950]">{link}</span>
                         )}
@@ -201,7 +201,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">06.</span> Security
+              <span className="text-info font-mono">06.</span> Security
             </h2>
             <p>
               We implement industry-standard technical measures to protect your data:
@@ -223,7 +223,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">07.</span> Your Rights
+              <span className="text-info font-mono">07.</span> Your Rights
             </h2>
             <p className="mb-3">Under applicable data protection law, you have the right to:</p>
             <ul className="list-none space-y-2 pl-4">
@@ -236,12 +236,12 @@ export default function PrivacyPage() {
                 'Withdraw consent at any time where processing is based on consent',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-[#58a6ff] mt-0.5">▸</span>
+                  <span className="text-info mt-0.5">▸</span>
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[#8b949e]">
+            <p className="mt-3 text-fg-muted">
               Since MineCAD AI collects minimal personal data and does not require user accounts,
               most of these rights are automatically satisfied by our design.
             </p>
@@ -249,7 +249,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">08.</span> Children&apos;s Privacy
+              <span className="text-info font-mono">08.</span> Children&apos;s Privacy
             </h2>
             <p>
               MineCAD AI is a professional engineering tool intended for users aged 18 and older.
@@ -260,7 +260,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">09.</span> Changes to This Policy
+              <span className="text-info font-mono">09.</span> Changes to This Policy
             </h2>
             <p>
               We may update this Privacy Policy from time to time. We will notify you by updating the
@@ -271,7 +271,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <span className="text-[#58a6ff] font-mono">10.</span> Contact Us
+              <span className="text-info font-mono">10.</span> Contact Us
             </h2>
             <p>
               If you have questions about this Privacy Policy or want to exercise your data rights,
@@ -280,10 +280,10 @@ export default function PrivacyPage() {
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#30363d] flex flex-wrap gap-4 text-sm">
-          <Link href="/terms" className="text-[#58a6ff] hover:underline font-mono">Terms &amp; Conditions →</Link>
-          <Link href="/cookies" className="text-[#58a6ff] hover:underline font-mono">Cookie Policy →</Link>
-          <Link href="/" className="text-[#58a6ff] hover:underline font-mono">Back to App →</Link>
+        <div className="mt-12 pt-8 border-t border-edge flex flex-wrap gap-4 text-sm">
+          <Link href="/terms" className="text-info hover:underline font-mono">Terms &amp; Conditions →</Link>
+          <Link href="/cookies" className="text-info hover:underline font-mono">Cookie Policy →</Link>
+          <Link href="/" className="text-info hover:underline font-mono">Back to App →</Link>
         </div>
       </main>
     </div>

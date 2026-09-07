@@ -738,7 +738,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="h-dvh w-screen flex flex-col overflow-hidden bg-[#0d1117] text-[#e6edf3]">
+    <div className="h-dvh w-screen flex flex-col overflow-hidden bg-bg-base text-fg">
       {/* Top Toolbar */}
       <Toolbar
         activeView={activeView}
@@ -780,7 +780,7 @@ export default function Home() {
               onClick={() => setLeftDrawerOpen(false)}
               aria-hidden
             />
-            <div className="fixed inset-y-0 left-0 z-50 flex w-[85vw] max-w-80 flex-col bg-[#0d1117] border-r border-[#30363d] shadow-2xl md:hidden">
+            <div className="fixed inset-y-0 left-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-r border-edge shadow-[var(--shadow-pop)] md:hidden">
               <LeftSidebar
                 projects={projects}
                 selectedProject={selectedProject}
@@ -794,9 +794,9 @@ export default function Home() {
         )}
 
         {/* Center Viewports + CLI / AI Box */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117] min-w-0">
+        <div className="flex-1 flex flex-col overflow-hidden bg-bg-base min-w-0">
           {/* Canvas area */}
-          <div className="flex-1 relative bg-[#0d1117] border-b border-[#30363d] min-h-[280px]">
+          <div className="flex-1 relative bg-bg-base border-b border-edge min-h-[280px]">
             {activeView === '2d' ? (
               <Canvas2D
                 geometry={geometry}
@@ -851,7 +851,7 @@ export default function Home() {
               onClick={() => setRightDrawerOpen(false)}
               aria-hidden
             />
-            <div className="fixed inset-y-0 right-0 z-50 flex w-[85vw] max-w-80 flex-col bg-[#0d1117] border-l border-[#30363d] shadow-2xl md:hidden">
+            <div className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] md:hidden">
               <RightSidebar
                 geometry={geometry}
                 layers={layers}
@@ -870,22 +870,40 @@ export default function Home() {
             if (!leftDrawerOpen) setLeftCollapsed(false);
             setLeftDrawerOpen((v) => !v);
           }}
-          className="md:hidden fixed top-14 left-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#161b22] border border-[#30363d] text-lg text-[#e6edf3] shadow-lg active:bg-[#21262d]"
+          className={`${leftDrawerOpen || rightDrawerOpen ? 'hidden' : 'flex'} md:hidden fixed top-14 left-3 z-50 h-11 w-11 items-center justify-center rounded-full bg-surface-overlay border border-edge-strong text-fg shadow-[var(--shadow-pop)] active:scale-95 transition-transform`}
           title="Projects & templates"
           aria-label={leftDrawerOpen ? 'Close projects panel' : 'Open projects and templates'}
         >
-          {leftDrawerOpen ? '✕' : '☰'}
+          {leftDrawerOpen ? (
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+              <path d="M3 3l10 10M13 3 3 13" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+              <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+            </svg>
+          )}
         </button>
         <button
           onClick={() => {
             if (!rightDrawerOpen) setRightCollapsed(false);
             setRightDrawerOpen((v) => !v);
           }}
-          className="md:hidden fixed top-14 right-3 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#161b22] border border-[#30363d] text-lg text-[#e6edf3] shadow-lg active:bg-[#21262d]"
+          className={`${leftDrawerOpen || rightDrawerOpen ? 'hidden' : 'flex'} md:hidden fixed top-14 right-3 z-50 h-11 w-11 items-center justify-center rounded-full bg-surface-overlay border border-edge-strong text-fg shadow-[var(--shadow-pop)] active:scale-95 transition-transform`}
           title="Properties & layers"
           aria-label={rightDrawerOpen ? 'Close properties panel' : 'Open properties and layers'}
         >
-          {rightDrawerOpen ? '✕' : '🎚️'}
+          {rightDrawerOpen ? (
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+              <path d="M3 3l10 10M13 3 3 13" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+              <path d="M2.5 5h11M2.5 12h11" />
+              <circle cx="6" cy="5" r="1.8" />
+              <circle cx="10" cy="12" r="1.8" />
+            </svg>
+          )}
         </button>
       </div>
       <LegalFooter />

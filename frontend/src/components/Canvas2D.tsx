@@ -73,7 +73,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
     const h = rect.height;
 
     // Background
-    ctx.fillStyle = '#0d1117';
+    ctx.fillStyle = '#0a0e15';
     ctx.fillRect(0, 0, w, h);
 
     // Grid — step grows with zoom-out so the line count stays bounded
@@ -600,39 +600,51 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden select-none">
       {/* Top Surveying Tool Bar Overlay */}
-      <div className="absolute top-3 left-3 bg-[#161b22]/95 border border-[#30363d] rounded-lg p-1 flex items-center gap-1 z-30 shadow-xl font-mono text-[11px]">
+      <div className="absolute top-3 left-3 right-14 bg-surface-overlay/90 backdrop-blur border border-edge rounded-lg p-1 flex items-center gap-1 z-30 shadow-[var(--shadow-pop)] font-mono text-[11px] overflow-x-auto scrollbar-none">
         <button
           onClick={() => { setActiveTool('pan'); setMeasurePoints([]); }}
-          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'pan' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'pan' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
         >
-          <span>🔍</span>
-          <span>Pan/Inspect</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <circle cx="7" cy="7" r="4" />
+            <path d="m10 10 3.5 3.5" />
+          </svg>
+          <span className="hidden sm:inline">Pan/Inspect</span>
         </button>
         <button
           onClick={() => { setActiveTool('coordinate'); setMeasurePoints([]); }}
-          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'coordinate' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'coordinate' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
         >
-          <span>📍</span>
-          <span>XY Easting/Northing</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <path d="M8 14.5s5-4.7 5-8.5a5 5 0 0 0-10 0c0 3.8 5 8.5 5 8.5Z" />
+            <circle cx="8" cy="6" r="1.8" />
+          </svg>
+          <span className="hidden sm:inline">XY Easting/Northing</span>
         </button>
         <button
           onClick={() => { setActiveTool('distance'); setMeasurePoints([]); }}
-          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'distance' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'distance' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
         >
-          <span>📏</span>
-          <span>Distance Tape</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <rect x="1.5" y="5" width="13" height="6" rx="1" />
+            <path d="M4.5 5v2.2M7.5 5v3M10.5 5v2.2" />
+          </svg>
+          <span className="hidden sm:inline">Distance Tape</span>
         </button>
         <button
           onClick={() => { setActiveTool('area'); setMeasurePoints([]); }}
-          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors ${activeTool === 'area' ? 'bg-[#1f6feb] text-white' : 'text-[#8b949e] hover:bg-[#21262d]'}`}
+          className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'area' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
         >
-          <span>📐</span>
-          <span>Polygon Area</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <path d="M2 3h12l-1.5 10h-9L2 3Z" />
+            <path d="M8 3v10" strokeDasharray="2 1.5" />
+          </svg>
+          <span className="hidden sm:inline">Polygon Area</span>
         </button>
         {measurePoints.length > 0 && (
           <button
             onClick={() => setMeasurePoints([])}
-            className="px-2 py-1 bg-[#da3633] text-white rounded text-[10px] ml-1"
+            className="px-2 py-1 bg-danger/15 text-danger border border-danger/40 rounded text-[10px] ml-1 hover:bg-danger/25 transition-colors shrink-0"
           >
             Clear
           </button>
@@ -641,14 +653,14 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
 
       {/* Legend (sheet mode) — below the tool bar, collapsible */}
       {sheetMode && geometry && (
-        <div className="absolute left-3 bg-[#161b22]/95 border border-[#30363d] rounded-lg z-30 shadow-xl font-mono text-[10px] max-w-44" style={{ top: 52 }}>
+        <div className="absolute left-3 bg-surface-overlay/90 backdrop-blur border border-edge rounded-lg z-30 shadow-[var(--shadow-pop)] font-mono text-[10px] max-w-44" style={{ top: 52 }}>
           <button
             onClick={() => setLegendOpen(!legendOpen)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[#8b949e] hover:text-white"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-fg-muted hover:text-fg transition-colors"
             aria-label={legendOpen ? 'Collapse legend' : 'Expand legend'}
           >
-            <span className="font-semibold tracking-wider">LEGEND</span>
-            <span>{legendOpen ? '▾' : '▸'}</span>
+            <span className="font-semibold tracking-[0.14em] text-[9px] uppercase">Legend</span>
+            <span className="text-[8px]">{legendOpen ? '▾' : '▸'}</span>
           </button>
           {legendOpen && (
             <div className="px-2.5 pb-2 pt-0.5 space-y-1">
@@ -658,7 +670,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
                     className="inline-block w-3 h-0 border-t-2 shrink-0"
                     style={{ borderColor: dxfColor(l.color) }}
                   />
-                  <span className="text-[#8b949e] truncate" title={l.description}>{l.name}</span>
+                  <span className="text-fg-muted truncate" title={l.description}>{l.name}</span>
                 </div>
               ))}
             </div>
@@ -667,9 +679,9 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       )}
 
       {/* North Compass Arrow Overlay */}
-      <div className="absolute top-3 right-3 w-12 h-12 bg-[#161b22]/90 border border-[#30363d] rounded-full flex flex-col items-center justify-center pointer-events-none z-30 shadow-lg">
-        <span className="text-[#f85149] text-xs font-bold font-mono">N ▲</span>
-        <span className="text-[8px] text-[#8b949e] font-mono">SURVEY</span>
+      <div className="absolute top-3 right-3 w-12 h-12 bg-surface-overlay/90 backdrop-blur border border-edge rounded-full flex flex-col items-center justify-center pointer-events-none z-30 shadow-lg">
+        <span className="text-danger text-xs font-bold font-mono">N ▲</span>
+        <span className="text-[8px] text-fg-faint font-mono">SURVEY</span>
       </div>
 
       <canvas
@@ -686,12 +698,12 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       />
 
       {/* Coordinate bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-6 bg-[#161b22]/90 border-t border-[#30363d] flex items-center px-3 text-[10px] text-[#8b949e] font-mono gap-4 z-30">
-        <span className="text-[#36d399]">Easting (X): {cursorWorld.x.toFixed(2)} m</span>
-        <span className="text-[#36d399]">Northing (Y): {cursorWorld.y.toFixed(2)} m</span>
-        <span>Tool: {activeTool.toUpperCase()}</span>
-        <span>Zoom: {(transform.scale * 100).toFixed(0)}%</span>
-        {geometry && <span className="text-[#58a6ff]">{geometry.primitives.length} CAD primitives</span>}
+      <div className="absolute bottom-0 left-0 right-0 min-h-6 bg-surface-raised/90 backdrop-blur border-t border-edge flex flex-wrap items-center px-3 py-0.5 text-[9px] md:text-[10px] text-fg-muted font-mono gap-x-4 gap-y-0.5 z-30">
+        <span className="text-success tabular-nums whitespace-nowrap">Easting (X): {cursorWorld.x.toFixed(2)} m</span>
+        <span className="text-success tabular-nums whitespace-nowrap">Northing (Y): {cursorWorld.y.toFixed(2)} m</span>
+        <span className="whitespace-nowrap">Tool: {activeTool.toUpperCase()}</span>
+        <span className="whitespace-nowrap">Zoom: {(transform.scale * 100).toFixed(0)}%</span>
+        {geometry && <span className="text-info whitespace-nowrap">{geometry.primitives.length} CAD primitives</span>}
       </div>
     </div>
   );

@@ -28,6 +28,13 @@ const QUICK_CHIPS = [
   'blast pattern for a quarry',
 ];
 
+const CheckIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 mt-px">
+    <circle cx="12" cy="12" r="10" strokeWidth="1.6" />
+    <path d="m8.5 12.2 2.4 2.4 4.6-5" />
+  </svg>
+);
+
 export default function PromptBox({ onGenerate, isGenerating, note = null }: PromptBoxProps) {
   const [prompt, setPrompt] = React.useState('');
   const [dismissedId, setDismissedId] = React.useState<number | null>(null);
@@ -51,31 +58,31 @@ export default function PromptBox({ onGenerate, isGenerating, note = null }: Pro
   };
 
   return (
-    <div className="bg-[#161b22] border-t border-[#30363d] p-3 md:p-4 flex flex-col gap-3">
-      {/* Parser interpretation confirmation (v2) */}
+    <div className="bg-surface-raised border-t border-edge p-3 md:p-4 flex flex-col gap-3">
+      {/* Parser interpretation confirmation (v2) — sleek inline pill */}
       {visibleNote && (
         <div
           key={visibleNote.id}
-          className="flex items-start gap-2 bg-[#052e16] border border-[#238636]/60 rounded-lg px-3 py-2 text-[11px] font-mono text-[#3fb950]"
+          className="flex items-start gap-2 bg-accent-dim border border-edge-accent rounded-lg px-3 py-2 text-[11px] font-mono text-fg animate-toast-in"
           role="status"
         >
-          <span className="shrink-0">✓</span>
-          <span>
-            <span className="text-[#8b949e]">Understood: </span>
+          <span className="text-accent">{CheckIcon}</span>
+          <span className="leading-relaxed">
+            <span className="text-fg-faint">Understood:&nbsp;</span>
             {visibleNote.text}
           </span>
         </div>
       )}
 
       {/* One-tap suggestion chips */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {QUICK_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
             onClick={() => onGenerate(chip)}
             disabled={isGenerating}
-            className="shrink-0 text-[11px] text-[#e6edf3] bg-[#1f6feb]/20 hover:bg-[#1f6feb] border border-[#1f6feb]/50 rounded-full px-3 py-1.5 transition-colors font-mono disabled:opacity-40"
+            className="chip shrink-0 text-[11px] px-3 py-1.5 font-mono disabled:opacity-40"
             title={chip}
           >
             {chip}
@@ -85,15 +92,13 @@ export default function PromptBox({ onGenerate, isGenerating, note = null }: Pro
 
       {/* Quick Examples */}
       <div>
-        <div className="text-[10px] text-[#8b949e] uppercase tracking-wider font-mono font-semibold mb-2">
-          Suggested Engineering Prompts
-        </div>
+        <div className="eyebrow mb-2">Suggested Engineering Prompts</div>
         <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto pr-1 scrollbar-thin">
           {EXAMPLES.map((ex, idx) => (
             <button
               key={idx}
               onClick={() => setPrompt(ex)}
-              className="text-[10px] text-[#58a6ff] hover:text-white bg-[#0d1117] hover:bg-[#1f6feb] border border-[#30363d] rounded-full px-2.5 py-1 text-left transition-colors font-mono max-w-[400px] truncate"
+              className="chip text-[10px] px-2.5 py-1 text-left font-mono max-w-[400px] truncate"
               title={ex}
             >
               {ex}
@@ -115,18 +120,18 @@ export default function PromptBox({ onGenerate, isGenerating, note = null }: Pro
               }
             }}
             placeholder='Describe your mine in plain words — e.g. "open pit with 5 benches 10m high", "room and pillar coal mine"...'
-            className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-base md:text-xs text-[#e6edf3] font-mono placeholder-[#484f58] focus:border-[#1f6feb] outline-none h-14 resize-none"
+            className="input w-full px-3 py-2 text-base md:text-xs font-mono h-14 resize-none leading-relaxed"
           />
         </div>
         <button
           type="submit"
           disabled={!prompt.trim() || isGenerating}
-          className="bg-[#238636] hover:bg-[#2ea043] disabled:bg-[#238636]/40 disabled:text-[#8b949e]/40 text-white text-xs font-semibold rounded-lg px-3 md:px-5 shrink-0 flex flex-col justify-center items-center font-mono transition-colors"
+          className="btn-primary rounded-lg px-4 md:px-6 shrink-0 h-14 flex flex-col justify-center items-center text-xs font-mono tracking-[0.14em] disabled:opacity-40 disabled:pointer-events-none"
         >
           {isGenerating ? (
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full border border-t-transparent border-white animate-spin" />
-              <span>Generating...</span>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full border-2 border-t-transparent border-[#1c1305] animate-spin" />
+              <span>WORKING</span>
             </div>
           ) : (
             <span>GENERATE</span>

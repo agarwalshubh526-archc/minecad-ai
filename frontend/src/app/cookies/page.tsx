@@ -10,11 +10,11 @@ export default function CookiesPage() {
   const effectiveDate = 'September 4, 2026';
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#e6edf3] font-sans">
+    <div className="min-h-screen bg-bg-base text-fg font-sans">
       {/* Header */}
-      <header className="border-b border-[#30363d] bg-[#161b22] sticky top-0 z-10">
+      <header className="border-b border-edge bg-surface-raised sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-[#58a6ff] hover:text-white transition-colors">
+          <Link href="/" className="flex items-center gap-2 text-info hover:text-white transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
@@ -33,8 +33,8 @@ export default function CookiesPage() {
             Legal Document
           </div>
           <h1 className="text-3xl font-bold text-white mb-3">Cookie Policy</h1>
-          <p className="text-[#8b949e] text-sm font-mono">
-            Effective Date: <span className="text-[#58a6ff]">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
+          <p className="text-fg-muted text-sm font-mono">
+            Effective Date: <span className="text-info">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
           </p>
         </div>
 
@@ -61,20 +61,20 @@ export default function CookiesPage() {
               We prioritize browser-side storage for user preferences rather than server-set tracking cookies:
             </p>
 
-            <div className="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden mb-4">
-              <div className="px-4 py-3 border-b border-[#30363d] bg-[#0d1117]">
-                <span className="text-[#8b949e] font-mono text-xs uppercase tracking-wider">Essential / Functional Storage</span>
+            <div className="bg-surface-raised border border-edge rounded-lg overflow-hidden mb-4">
+              <div className="px-4 py-3 border-b border-edge bg-bg-base">
+                <span className="text-fg-muted font-mono text-xs uppercase tracking-wider">Essential / Functional Storage</span>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[#30363d]">
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Name</th>
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Type</th>
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Purpose</th>
-                    <th className="text-left px-4 py-3 text-[#8b949e] font-mono text-xs">Expires</th>
+                  <tr className="border-b border-edge">
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Name</th>
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Type</th>
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Purpose</th>
+                    <th className="text-left px-4 py-3 text-fg-muted font-mono text-xs">Expires</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#30363d]">
+                <tbody className="divide-y divide-edge">
                   {[
                     ['minecad_ai_config', 'Local Storage', 'Stores your AI provider preference (local/deepseek/ollama) and model selection', 'Until manually cleared'],
                     ['minecad_view_mode', 'Local Storage', 'Remembers 2D/3D view preference', 'Until manually cleared'],
@@ -84,16 +84,16 @@ export default function CookiesPage() {
                   ].map(([name, type, purpose, expires]) => (
                     <tr key={name}>
                       <td className="px-4 py-3 font-mono text-xs text-[#f97316]">{name}</td>
-                      <td className="px-4 py-3 text-xs text-[#58a6ff]">{type}</td>
+                      <td className="px-4 py-3 text-xs text-info">{type}</td>
                       <td className="px-4 py-3 text-xs text-[#c9d1d9]">{purpose}</td>
-                      <td className="px-4 py-3 text-xs text-[#8b949e]">{expires}</td>
+                      <td className="px-4 py-3 text-xs text-fg-muted">{expires}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="bg-[#0d1117] border border-[#238636]/40 rounded-lg p-4">
+            <div className="bg-bg-base border border-success/40 rounded-lg p-4">
               <h3 className="text-[#3fb950] font-semibold mb-2 text-sm">✓ Tracking Cookies: None</h3>
               <p>
                 MineCAD AI does <strong className="text-white">NOT</strong> use:
@@ -129,7 +129,7 @@ export default function CookiesPage() {
                 'If you directly configure a DeepSeek or Hugging Face API call from the browser, those requests are subject to their respective cookie policies.',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-[#8b949e] mt-0.5">→</span>
+                  <span className="text-fg-muted mt-0.5">→</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -188,14 +188,14 @@ export default function CookiesPage() {
                   steps: 'F12 → Application/Storage tab → Local Storage → Right-click → Clear'
                 },
               ].map(({ browser, steps }) => (
-                <div key={browser} className="bg-[#161b22] border border-[#30363d] rounded-lg p-3">
+                <div key={browser} className="bg-surface-raised border border-edge rounded-lg p-3">
                   <div className="text-white font-semibold text-xs font-mono mb-2">{browser}</div>
-                  <div className="text-[#8b949e] text-xs leading-relaxed">{steps}</div>
+                  <div className="text-fg-muted text-xs leading-relaxed">{steps}</div>
                 </div>
               ))}
             </div>
 
-            <p className="mt-4 text-[#8b949e] text-xs">
+            <p className="mt-4 text-fg-muted text-xs">
               Note: Clearing storage will reset your AI provider settings, project files stored in the browser,
               and view preferences. Exported files (DXF, PDF, SVG, etc.) saved to your computer are not affected.
             </p>
@@ -235,10 +235,10 @@ export default function CookiesPage() {
           </section>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#30363d] flex flex-wrap gap-4 text-sm">
-          <Link href="/terms" className="text-[#58a6ff] hover:underline font-mono">Terms &amp; Conditions →</Link>
-          <Link href="/privacy" className="text-[#58a6ff] hover:underline font-mono">Privacy Policy →</Link>
-          <Link href="/" className="text-[#58a6ff] hover:underline font-mono">Back to App →</Link>
+        <div className="mt-12 pt-8 border-t border-edge flex flex-wrap gap-4 text-sm">
+          <Link href="/terms" className="text-info hover:underline font-mono">Terms &amp; Conditions →</Link>
+          <Link href="/privacy" className="text-info hover:underline font-mono">Privacy Policy →</Link>
+          <Link href="/" className="text-info hover:underline font-mono">Back to App →</Link>
         </div>
       </main>
     </div>

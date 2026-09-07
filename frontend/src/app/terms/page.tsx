@@ -10,11 +10,11 @@ export default function TermsPage() {
   const effectiveDate = 'September 4, 2026';
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#e6edf3] font-sans">
+    <div className="min-h-screen bg-bg-base text-fg font-sans">
       {/* Header */}
-      <header className="border-b border-[#30363d] bg-[#161b22] sticky top-0 z-10">
+      <header className="border-b border-edge bg-surface-raised sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-[#58a6ff] hover:text-white transition-colors">
+          <Link href="/" className="flex items-center gap-2 text-info hover:text-white transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
@@ -34,8 +34,8 @@ export default function TermsPage() {
             Legal Document
           </div>
           <h1 className="text-3xl font-bold text-white mb-3">Terms &amp; Conditions</h1>
-          <p className="text-[#8b949e] text-sm font-mono">
-            Effective Date: <span className="text-[#58a6ff]">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
+          <p className="text-fg-muted text-sm font-mono">
+            Effective Date: <span className="text-info">{effectiveDate}</span> &nbsp;·&nbsp; Version 1.0
           </p>
         </div>
 
@@ -162,14 +162,14 @@ export default function TermsPage() {
             </p>
             <ul className="mt-3 list-none space-y-1 pl-4">
               <li className="flex items-start gap-2">
-                <span className="text-[#58a6ff]">→</span>
+                <span className="text-info">→</span>
                 <a href="https://www.deepseek.com/terms" target="_blank" rel="noopener noreferrer"
-                   className="text-[#58a6ff] hover:underline">DeepSeek Terms of Service</a>
+                   className="text-info hover:underline">DeepSeek Terms of Service</a>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-[#58a6ff]">→</span>
+                <span className="text-info">→</span>
                 <a href="https://huggingface.co/terms-of-service" target="_blank" rel="noopener noreferrer"
-                   className="text-[#58a6ff] hover:underline">Hugging Face Terms of Service</a>
+                   className="text-info hover:underline">Hugging Face Terms of Service</a>
               </li>
             </ul>
           </section>
@@ -178,7 +178,7 @@ export default function TermsPage() {
             <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
               <span className="text-[#f97316] font-mono">07.</span> Limitation of Liability
             </h2>
-            <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
+            <div className="bg-surface-raised border border-edge rounded-lg p-4">
               <p>
                 TO THE MAXIMUM EXTENT PERMITTED BY LAW, MINECAD AI AND ITS DEVELOPERS SHALL NOT BE LIABLE
                 FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT
@@ -248,10 +248,10 @@ export default function TermsPage() {
         </div>
 
         {/* Footer nav */}
-        <div className="mt-12 pt-8 border-t border-[#30363d] flex flex-wrap gap-4 text-sm">
-          <Link href="/privacy" className="text-[#58a6ff] hover:underline font-mono">Privacy Policy →</Link>
-          <Link href="/cookies" className="text-[#58a6ff] hover:underline font-mono">Cookie Policy →</Link>
-          <Link href="/" className="text-[#58a6ff] hover:underline font-mono">Back to App →</Link>
+        <div className="mt-12 pt-8 border-t border-edge flex flex-wrap gap-4 text-sm">
+          <Link href="/privacy" className="text-info hover:underline font-mono">Privacy Policy →</Link>
+          <Link href="/cookies" className="text-info hover:underline font-mono">Cookie Policy →</Link>
+          <Link href="/" className="text-info hover:underline font-mono">Back to App →</Link>
         </div>
       </main>
     </div>

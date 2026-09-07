@@ -1,34 +1,257 @@
 @import "tailwindcss";
 
+/* ─── MineCAD AI — premium dark design tokens ──────────────────────────────
+   Linear/Vercel-grade restraint: layered surfaces, ONE amber accent used
+   only for primary actions & active states, cool gray ramp, hairline
+   borders + soft shadows per elevation. Mapped into Tailwind 4 via @theme
+   so `bg-surface-raised`, `text-fg-muted`, `border-edge`, `text-accent`,
+   `bg-accent-dim` … work anywhere. */
+
 :root {
-  --background: #0d1117;
-  --foreground: #e6edf3;
+  /* elevation: sunken canvas → base → raised panel → overlay */
+  --bg-base: #0a0e15;
+  --surface-sunken: #070a10;
+  --surface-raised: #10151f;
+  --surface-overlay: #161d2b;
+  --surface-hover: #1c2536;
+  --surface-active: #243050;
+
+  /* hairlines */
+  --edge: #1f2937;
+  --edge-strong: #2c3a52;
+  --edge-accent: rgba(247, 184, 78, 0.4);
+
+  /* cool-gray text ramp */
+  --fg: #e9eef6;
+  --fg-muted: #98a5b9;
+  --fg-faint: #5d6a80;
+
+  /* signature amber accent (primary/active/selection ONLY) */
+  --accent: #f7b84e;
+  --accent-strong: #ffca6e;
+  --accent-dim: rgba(247, 184, 78, 0.12);
+  --accent-dim-strong: rgba(247, 184, 78, 0.2);
+
+  /* semantic */
+  --info: #5b8def;
+  --success: #3fb68b;
+  --warn: #e8a33d;
+  --danger: #e5534b;
+
+  /* elevation shadows */
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--edge);
+}
+
+@theme inline {
+  --color-bg-base: var(--bg-base);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-dim: var(--accent-dim);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
 }
 
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--bg-base);
+  color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow: hidden;
   height: 100vh;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Custom Scrollbar */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+::selection {
+  background: var(--accent-dim-strong);
+  color: var(--fg);
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: #0d1117;
+/* Tabular numerals for every measurement readout */
+.font-tnum,
+.font-mono {
+  font-variant-numeric: tabular-nums;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 2px;
+/* ─── Primitives ─────────────────────────────────────────────────────────── */
+
+.card {
+  background-color: var(--surface-raised);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel);
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #8b949e;
+/* Ghost button — icon/tool actions */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--fg-muted);
+  background: transparent;
+  transition: background-color 160ms ease-out, color 160ms ease-out,
+    border-color 160ms ease-out, box-shadow 160ms ease-out, transform 120ms ease-out;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
 }
+.btn:hover { background-color: var(--surface-hover); color: var(--fg); }
+.btn:active { transform: scale(0.96); }
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--edge-accent);
+}
+.btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+/* Primary CTA — the single amber element per region */
+.btn-primary {
+  background-color: var(--accent);
+  color: #1c1305;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 16px rgba(247, 184, 78, 0.22);
+}
+.btn-primary:hover {
+  background-color: var(--accent-strong);
+  color: #1c1305;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 6px 20px rgba(247, 184, 78, 0.3);
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent);
+}
+
+/* Active toggle (view modes, tools, tabs) — amber selection */
+.btn-active {
+  background-color: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--edge-accent);
+}
+.btn-active:hover {
+  background-color: var(--accent-dim-strong);
+  color: var(--accent-strong);
+}
+
+/* Inputs */
+.input {
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  color: var(--fg);
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(247, 184, 78, 0.16);
+}
+.input::placeholder { color: var(--fg-faint); }
+
+/* Suggestion chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--edge);
+  background-color: var(--surface-overlay);
+  color: var(--fg-muted);
+  border-radius: 999px;
+  transition: border-color 160ms ease-out, color 160ms ease-out,
+    background-color 160ms ease-out, transform 160ms ease-out;
+  cursor: pointer;
+  user-select: none;
+}
+.chip:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
+  background-color: var(--accent-dim);
+  transform: translateY(-1px);
+}
+.chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--edge-accent);
+}
+
+/* Uppercase micro-label (PROPERTIES, LAYERS, section headers) */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  font-weight: 650;
+}
+
+/* Skeleton shimmer for generation loading */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(100deg, var(--surface-raised) 40%, var(--surface-hover) 50%, var(--surface-raised) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 200ms ease-out both; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-toast-in { animation: toast-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
+/* ─── Scrollbars — slim, themed ──────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge-strong) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--edge-strong);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-faint);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge-strong) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--edge-strong); border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--fg-faint); }
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }

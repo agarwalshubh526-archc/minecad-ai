@@ -3,6 +3,100 @@
 import React from 'react';
 import type { MineTemplate, ProjectFile } from '@/types';
 
+const ICON_PATHS: Record<string, React.ReactNode> = {
+  survey_traverse: (
+    <>
+      <circle cx="6" cy="6" r="3.5" />
+      <path d="M7.5 4.5 6 6l-1.5 1.5" />
+      <path d="M3 13.5h10M5 11.5l-2 2 2 2M11 11.5l2 2-2 2" />
+    </>
+  ),
+  topo_contours: (
+    <>
+      <path d="M2 5.5c2-1.5 4-1.5 6 0s4 1.5 6 0" />
+      <path d="M2 9c2-1.5 4-1.5 6 0s4 1.5 6 0" />
+      <path d="M3.5 12.5c1.5-1 3-1 4.5 0s3 1 4.5 0" />
+    </>
+  ),
+  borehole_strat: (
+    <>
+      <path d="M8 1.5v13" strokeDasharray="2 1.5" />
+      <path d="M6 4.5h4M5.5 8h5M6.5 11.5h3" />
+    </>
+  ),
+  open_pit: (
+    <>
+      <path d="M8 1.5 14 4.8v6.4L8 14.5 2 11.2V4.8L8 1.5Z" />
+      <path d="M2 4.8l6 3.2 6-3.2M8 8v6.5" />
+    </>
+  ),
+  cut_fill: (
+    <>
+      <path d="M2.5 13.5v-5M7 13.5V5.5M11.5 13.5V8" />
+      <path d="M1.5 13.5h13" />
+    </>
+  ),
+  longwall: (
+    <>
+      <rect x="1.5" y="5" width="8" height="5.5" rx="1" />
+      <circle cx="4" cy="12" r="1.5" />
+      <circle cx="8.5" cy="12" r="1.5" />
+      <path d="M9.5 7h2.5l1.5 2" />
+    </>
+  ),
+  room_pillar: (
+    <>
+      <rect x="2" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9.5" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="2" y="9" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9.5" y="9" width="4.5" height="4.5" rx="0.5" />
+    </>
+  ),
+  ventilation: (
+    <>
+      <circle cx="8" cy="8" r="1.8" />
+      <path d="M8 6.2c.3-2.3 2-3.4 4.3-3.4-.4 2.1-1.7 3.2-4.3 3.4ZM9.7 8c2.3.3 3.4 2 3.4 4.3-2.1-.4-3.2-1.7-3.4-4.3ZM8 9.7c-.3 2.3-2 3.4-4.3 3.4.4-2.1 1.7-3.2 4.3-3.4ZM6.3 8c-2.3-.3-3.4-2-3.4-4.3 2.1.4 3.2 1.7 3.4 4.3Z" />
+    </>
+  ),
+  conveyor: (
+    <>
+      <path d="M2 6h9l3 4" />
+      <path d="M2 9h9" />
+      <path d="M12 3.5 14 5.5l-2 2M12 8.5l2 2-2 2" />
+    </>
+  ),
+  blast: (
+    <>
+      <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M12.6 3.4l-2.1 2.1M5.5 10.5l-2.1 2.1" />
+      <circle cx="8" cy="8" r="1.6" />
+    </>
+  ),
+  decline: (
+    <>
+      <path d="M2 3.5h5l5 10" />
+      <path d="M9.5 10.5H14" />
+      <path d="M12.5 8.5 14 10.5l-1.5 2" />
+    </>
+  ),
+};
+
+function TemplateIcon({ id }: { id: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4 shrink-0"
+      aria-hidden="true"
+    >
+      {ICON_PATHS[id] ?? ICON_PATHS.open_pit}
+    </svg>
+  );
+}
+
 const TEMPLATES: MineTemplate[] = [
   {
     id: 'survey_traverse', name: 'Mine Survey Traverse', category: 'Mine Surveying', icon: '📐',
@@ -75,36 +169,53 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
 
   if (collapsed) {
     return (
-      <div className="w-10 bg-[#0d1117] border-r border-[#30363d] flex flex-col items-center py-2 gap-2">
-        <button onClick={() => setCollapsed(false)} className="text-[#8b949e] hover:text-white text-sm p-1.5 rounded hover:bg-[#21262d] transition-colors" title="Expand">
-          ▶
+      <div className="w-10 bg-surface-raised border-r border-edge flex flex-col items-center py-2 gap-1.5">
+        <button onClick={() => setCollapsed(false)} className="btn p-1.5 text-fg-muted" title="Expand">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <path d="M6 3.5 10.5 8 6 12.5" />
+          </svg>
         </button>
-        <div className="w-6 h-px bg-[#30363d] my-1" />
-        <button onClick={() => { setCollapsed(false); setActiveTab('templates'); }} className="text-lg p-1" title="Templates">📋</button>
-        <button onClick={() => { setCollapsed(false); setActiveTab('projects'); }} className="text-lg p-1" title="Projects">📁</button>
+        <div className="w-5 h-px bg-edge my-1" />
+        <button onClick={() => { setCollapsed(false); setActiveTab('templates'); }} className="btn p-1.5 text-fg-muted" title="Templates">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">
+            <rect x="2" y="2" width="5" height="5" rx="1" />
+            <rect x="9" y="2" width="5" height="5" rx="1" />
+            <rect x="2" y="9" width="5" height="5" rx="1" />
+            <rect x="9" y="9" width="5" height="5" rx="1" />
+          </svg>
+        </button>
+        <button onClick={() => { setCollapsed(false); setActiveTab('projects'); }} className="btn p-1.5 text-fg-muted" title="Projects">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">
+            <path d="M1.5 4.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 2h6a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 12V4.5Z" />
+          </svg>
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="w-full md:w-64 bg-[#0d1117] border-r border-[#30363d] flex flex-col overflow-hidden">
+    <div className="w-full md:w-64 bg-surface-raised border-r border-edge flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="h-10 flex items-center justify-between px-3 border-b border-[#30363d]">
-        <div className="flex gap-1">
+      <div className="h-10 flex items-center justify-between px-2 border-b border-edge">
+        <div className="flex gap-0.5 bg-surface-sunken border border-edge rounded-md p-0.5">
           <button
-            className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${activeTab === 'templates' ? 'bg-[#21262d] text-[#e6edf3]' : 'text-[#8b949e] hover:text-white'}`}
+            className={`px-2.5 py-1 text-[10px] rounded transition-colors font-medium ${activeTab === 'templates' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:text-fg border border-transparent'}`}
             onClick={() => setActiveTab('templates')}
           >
             Templates
           </button>
           <button
-            className={`px-2 py-1 text-[10px] rounded font-mono transition-colors ${activeTab === 'projects' ? 'bg-[#21262d] text-[#e6edf3]' : 'text-[#8b949e] hover:text-white'}`}
+            className={`px-2.5 py-1 text-[10px] rounded transition-colors font-medium ${activeTab === 'projects' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:text-fg border border-transparent'}`}
             onClick={() => setActiveTab('projects')}
           >
             Projects
           </button>
         </div>
-        <button onClick={() => setCollapsed(true)} className="text-[#484f58] hover:text-white text-xs transition-colors">◀</button>
+        <button onClick={() => setCollapsed(true)} className="btn p-1 text-fg-faint" title="Collapse">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
+            <path d="M10 3.5 5.5 8l4.5 4.5" />
+          </svg>
+        </button>
       </div>
 
       {/* Content */}
@@ -116,18 +227,20 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
               if (items.length === 0) return null;
               return (
                 <div key={cat}>
-                  <div className="text-[9px] uppercase tracking-wider text-[#484f58] font-semibold px-2 py-1.5 mt-1">{cat}</div>
+                  <div className="eyebrow px-2 pt-3 pb-1">{cat}</div>
                   {items.map(t => (
                     <button
                       key={t.id}
                       onClick={() => onLoadTemplate(t)}
-                      className="w-full text-left px-2 py-2 rounded-md hover:bg-[#161b22] transition-colors group"
+                      className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-hover transition-colors group border border-transparent hover:border-edge"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">{t.icon}</span>
-                        <div>
-                          <div className="text-xs text-[#e6edf3] group-hover:text-[#58a6ff] transition-colors">{t.name}</div>
-                          <div className="text-[9px] text-[#484f58]">{t.description}</div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-fg-faint group-hover:text-accent transition-colors">
+                          <TemplateIcon id={t.id} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs text-fg group-hover:text-accent transition-colors truncate">{t.name}</div>
+                          <div className="text-[9px] text-fg-faint truncate">{t.description}</div>
                         </div>
                       </div>
                     </button>
@@ -141,23 +254,25 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
         {activeTab === 'projects' && (
           <div className="p-2">
             {projects.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-[#30363d] text-2xl mb-2">📂</div>
-                <p className="text-[10px] text-[#484f58]">No projects yet</p>
-                <p className="text-[9px] text-[#30363d] mt-1">Generate a design to create a project</p>
+              <div className="text-center py-10">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 mx-auto text-fg-faint mb-2" aria-hidden="true">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2.5 3H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+                </svg>
+                <p className="text-[11px] text-fg-muted">No projects yet</p>
+                <p className="text-[9px] text-fg-faint mt-1">Generate a design to create a project</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1 pt-1">
                 {projects.map(p => (
                   <button
                     key={p.id}
                     onClick={() => onSelectProject(p)}
-                    className={`w-full text-left px-2 py-2 rounded-md transition-colors ${
-                      selectedProject?.id === p.id ? 'bg-[#1f6feb20] border border-[#1f6feb40]' : 'hover:bg-[#161b22]'
+                    className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors ${
+                      selectedProject?.id === p.id ? 'bg-accent-dim border border-edge-accent' : 'hover:bg-surface-hover border border-transparent'
                     }`}
                   >
-                    <div className="text-xs text-[#e6edf3]">{p.name}</div>
-                    <div className="text-[9px] text-[#484f58] mt-0.5">{p.object_type} • {new Date(p.created_at).toLocaleTimeString()}</div>
+                    <div className="text-xs text-fg truncate">{p.name}</div>
+                    <div className="text-[9px] text-fg-faint mt-0.5 truncate">{p.object_type} • {new Date(p.created_at).toLocaleTimeString()}</div>
                   </button>
                 ))}
               </div>

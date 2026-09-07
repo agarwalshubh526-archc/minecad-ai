@@ -27,29 +27,40 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
   }, [history]);
 
   return (
-    <div className="h-32 bg-[#0d1117] border-t border-[#30363d] flex flex-col overflow-hidden">
+    <div className="h-32 bg-surface-sunken border-t border-edge flex flex-col overflow-hidden">
+      {/* Window chrome: traffic-light dots + title + provider badge */}
+      <div className="flex items-center gap-2 px-3 h-7 border-b border-edge shrink-0 select-none">
+        <div className="flex gap-1.5" aria-hidden>
+          <span className="w-2.5 h-2.5 rounded-full bg-[#e5534b]/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#e8a33d]/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#3fb68b]/70" />
+        </div>
+        <span className="eyebrow ml-1">Terminal</span>
+        <span className="flex-1" />
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-semibold border ${
+          activeProvider === 'deepseek'
+            ? 'bg-success/10 text-success border-success/30'
+            : 'bg-surface-overlay text-fg-muted border-edge'
+        }`}>
+          AI: {activeProvider.toUpperCase()}
+        </span>
+      </div>
+
       {/* Console log outputs */}
       <div
         ref={containerRef}
-        className="flex-1 p-3 overflow-y-auto font-mono text-xs text-[#8b949e] space-y-1 select-text scrollbar-thin"
+        className="flex-1 p-3 overflow-y-auto font-mono text-xs text-fg-muted space-y-1 select-text scrollbar-thin leading-relaxed"
       >
-        <div className="text-[#30363d] border-b border-[#30363d]/50 pb-1 mb-2 flex items-center justify-between flex-wrap gap-1">
-          <span>MineCAD AI CLI Terminal Console v1.1.0</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-            activeProvider === 'deepseek'
-              ? 'bg-[#052e16] text-[#36d399] border border-[#15803d]'
-              : 'bg-[#161b22] text-[#8b949e]'
-          }`}>
-            AI Provider: {activeProvider.toUpperCase()}
-          </span>
+        <div className="text-fg-faint border-b border-edge pb-1.5 mb-2 flex items-center justify-between flex-wrap gap-1">
+          <span>MineCAD AI CLI Console v1.1.0</span>
         </div>
         {history.map((line, idx) => {
-          let style = 'text-[#8b949e]';
-          if (line.startsWith('Command:')) style = 'text-[#58a6ff]';
-          else if (line.startsWith('Success:')) style = 'text-[#3fb950]';
-          else if (line.startsWith('Error:')) style = 'text-[#f85149]';
-          else if (line.startsWith('System:')) style = 'text-[#d38aea]';
-          else if (line.startsWith('DeepSeek:')) style = 'text-[#36d399] bg-[#052e16]/30 px-1 py-0.5 rounded border-l-2 border-[#36d399]';
+          let style = 'text-fg-muted';
+          if (line.startsWith('Command:')) style = 'text-accent';
+          else if (line.startsWith('Success:')) style = 'text-success';
+          else if (line.startsWith('Error:')) style = 'text-danger';
+          else if (line.startsWith('System:')) style = 'text-info';
+          else if (line.startsWith('DeepSeek:')) style = 'text-success bg-success/10 px-1.5 py-0.5 rounded border-l-2 border-success';
 
           return (
             <div key={idx} className={`${style} whitespace-pre-wrap break-words`}>
@@ -60,20 +71,19 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
       </div>
 
       {/* CLI Input Line */}
-      <div className="h-9 md:h-8 bg-[#161b22] border-t border-[#30363d] flex items-center px-3 gap-2">
-        <span className="font-mono text-xs text-[#58a6ff] select-none font-bold shrink-0">
-          Command:
+      <div className="h-9 md:h-8 bg-surface-raised border-t border-edge flex items-center px-3 gap-2">
+        <span className="font-mono text-xs text-accent select-none font-bold shrink-0" aria-hidden>
+          ❯
         </span>
         <input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 min-w-0 bg-transparent text-base md:text-xs text-[#e6edf3] font-mono outline-none border-none"
-          placeholder='Type command or "deepseek <query>" (e.g., "deepseek how to design bench height", "bench_height 12", "help")'
+          className="flex-1 min-w-0 bg-transparent text-base md:text-xs text-fg font-mono outline-none border-none caret-[#f7b84e]"
+          placeholder='Type command or "deepseek <query>" (e.g., "bench_height 12", "help")'
         />
       </div>
     </div>
   );
 }
-
