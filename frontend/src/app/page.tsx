@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import type { AppState, ProjectFile, LayerInfo, GeometryData } from '@/types';
 import type { MineTemplateType } from '@/components/LeftSidebar';
 import Toolbar from '@/components/Toolbar';
 import LeftSidebar, { TEMPLATES } from '@/components/LeftSidebar';
 import RightSidebar from '@/components/RightSidebar';
 import Canvas2D from '@/components/Canvas2D';
-import Viewport3D from '@/components/Viewport3D';
+// three.js (~600 KB) is heavy — load the 3D viewport only when first needed
+// instead of paying its download + compile cost on every initial page load.
+const Viewport3D = dynamic(() => import('@/components/Viewport3D'), { ssr: false });
 import CommandLine from '@/components/CommandLine';
 import PromptBox from '@/components/PromptBox';
 import * as apiClient from '@/lib/apiClient';

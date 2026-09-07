@@ -120,7 +120,7 @@ function LightingRig({ center, radius }: { center: [number, number, number]; rad
         ref={key}
         castShadow
         intensity={1.9}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
         shadow-camera-near={radius * 0.05}
         shadow-camera-far={radius * 6}
@@ -139,6 +139,8 @@ function LightingRig({ center, radius }: { center: [number, number, number]; rad
 function CameraRecenter({ center, radius }: { center: [number, number, number]; radius: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as { target: THREE.Vector3; update: () => void } | null;
+  // demand frameloop: imperative camera moves must request a frame explicitly
+  const invalidate = useThree((s) => s.invalidate);
 
   useEffect(() => {
     camera.position.set(
@@ -152,7 +154,8 @@ function CameraRecenter({ center, radius }: { center: [number, number, number]; 
     } else {
       camera.lookAt(center[0], center[1], center[2]);
     }
-  }, [center, radius, camera, controls]);
+    invalidate();
+  }, [center, radius, camera, controls, invalidate]);
 
   return null;
 }
@@ -214,8 +217,14 @@ export default function Viewport3D({ geometry, viewMode, showSectionView, sectio
           near: 0.5,
           far: 20000,
         }}
+        // Demand frameloop: render only on interaction/state change instead
+        // of redrawing the full scene (shadow pass included) 60×/s forever —
+        // this was the source of the "lagging" heat/fan load. drei controls
+        // and gizmo invalidate on interaction; damping keeps invalidating
+        // while it settles.
+        frameloop="demand"
         shadows
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: false, localClippingEnabled: true }}
         style={{ background: '#0d1117' }}
       >
