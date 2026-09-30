@@ -4,10 +4,11 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import type { GeometryData, MeshData } from '@/types';
+import type { GeometryData, MeshData, LayerInfo } from '@/types';
 
 interface Viewport3DProps {
   geometry: GeometryData | null;
+  layers: LayerInfo[];
   viewMode: 'solid' | 'wireframe';
   showSectionView: boolean;
   sectionHeight: number;
@@ -160,8 +161,11 @@ function CameraRecenter({ center, radius }: { center: [number, number, number]; 
   return null;
 }
 
-export default function Viewport3D({ geometry, viewMode, showSectionView, sectionHeight }: Viewport3DProps) {
-  const meshes = useMemo(() => geometry?.meshes ?? [], [geometry]);
+export default function Viewport3D({ geometry, layers, viewMode, showSectionView, sectionHeight }: Viewport3DProps) {
+  const meshes = useMemo(() => {
+    const hidden = new Set(layers.filter(l => !l.visible).map(l => l.name));
+    return (geometry?.meshes ?? []).filter(m => !m.layer || !hidden.has(m.layer));
+  }, [geometry, layers]);
 
   // Calculate center for camera
   const center = useMemo(() => {

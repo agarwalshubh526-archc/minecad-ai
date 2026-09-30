@@ -45,3 +45,5 @@ jobs:
         run: npx eslint .
       - name: Build
         run: npm run build
+      - name: Smoke test production routes
+        run: npm run smoke

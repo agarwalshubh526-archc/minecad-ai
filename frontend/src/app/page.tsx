@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import type { AppState, ProjectFile, LayerInfo, GeometryData } from '@/types';
 import type { MineTemplateType } from '@/components/LeftSidebar';
 import Toolbar from '@/components/Toolbar';
-import LeftSidebar, { TEMPLATES } from '@/components/LeftSidebar';
+import LeftSidebar from '@/components/LeftSidebar';
 import RightSidebar from '@/components/RightSidebar';
 import Canvas2D from '@/components/Canvas2D';
 // three.js (~600 KB) is heavy — load the 3D viewport only when first needed
@@ -16,9 +16,25 @@ import PromptBox from '@/components/PromptBox';
 import * as apiClient from '@/lib/apiClient';
 import * as clientGeometry from '@/lib/geometryEngine';
 import { exportPDF } from '@/lib/pdfExport';
+import { exportDXF, exportSVG, exportOBJ, exportSTL } from '@/lib/cadExport';
 import { buildSheetFrame } from '@/lib/sheetFrame';
+import { isProjectFile, loadWorkspace, saveWorkspace } from '@/lib/projectStore';
+import { importSurveyCsv } from '@/lib/surveyImport';
 import LegalFooter from '@/components/LegalFooter';
 import OnboardingTour from '@/components/OnboardingTour';
+
+function layersForGeometry(geometry: GeometryData, previous: LayerInfo[] = []): LayerInfo[] {
+  const byName = new Map<string, LayerInfo>();
+  const add = (name: string, color: number, description: string) => {
+    if (!byName.has(name)) {
+      const existing = previous.find(l => l.name === name);
+      byName.set(name, { name, color, description, visible: existing?.visible ?? true, locked: false });
+    }
+  };
+  for (const layer of geometry.layers) add(layer.name, layer.color, layer.description);
+  for (const mesh of geometry.meshes) if (mesh.layer) add(mesh.layer, 7, '3D geometry');
+  return [...byName.values()];
+}
 
 export default function Home() {
   // App state
@@ -27,15 +43,45 @@ export default function Home() {
   const [selectedProject, setSelectedProject] = useState<ProjectFile | null>(null);
   const [geometry, setGeometry] = useState<GeometryData | null>(null);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const operationIdRef = useRef(0);
+  const editHistory = useRef<Record<string, { past: ProjectFile[]; future: ProjectFile[] }>>({});
+  const [, setHistoryRevision] = useState(0);
+  const recordEdit = (project: ProjectFile) => {
+    const entry = editHistory.current[project.id] ?? { past: [], future: [] };
+    entry.past.push(project);
+    if (entry.past.length > 30) entry.past.shift();
+    entry.future = [];
+    editHistory.current[project.id] = entry;
+    setHistoryRevision(v => v + 1);
+  };
+  const restoreEdit = (direction: 'undo' | 'redo') => {
+    if (!selectedProject) return;
+    const entry = editHistory.current[selectedProject.id];
+    if (!entry) return;
+    const source = direction === 'undo' ? entry.past : entry.future;
+    const target = direction === 'undo' ? entry.future : entry.past;
+    const previous = source.pop();
+    if (!previous) return;
+    target.push(selectedProject);
+    setProjects(items => items.map(p => p.id === previous.id ? previous : p));
+    setSelectedProject(previous);
+    setGeometry(previous.geometry);
+    setLayers(previous.geometry ? layersForGeometry(previous.geometry) : []);
+    setHistoryRevision(v => v + 1);
+  };
   const [aiConfig, setAiConfig] = useState<AppState['aiConfig']>({
     provider: 'local',
-    model: 'llama3.1',
-    baseUrl: 'http://localhost:11434',
+    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com',
     apiKey: '',
   });
   const [isGenerating, setIsGenerating] = useState(false);
   // v2 parser confirmation note shown in PromptBox (auto-dismisses there)
   const [parseNote, setParseNote] = useState<{ id: number; text: string } | null>(null);
+  const [generationError, setGenerationError] = useState('');
+  const [generationMethod, setGenerationMethod] = useState('Local rule-based geometry');
   // AutoCAD-style drawing sheet around the 2D view (default ON)
   const [sheetMode, setSheetMode] = useState(true);
   const [viewMode3D, setViewMode3D] = useState<'solid' | 'wireframe'>('solid');
@@ -54,9 +100,19 @@ export default function Home() {
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setLeftDrawerOpen(false); setRightDrawerOpen(false); }
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, []);
+
   // Load a mining template to initialize the workspace
   const handleLoadTemplate = async (template: MineTemplateType) => {
+    const operationId = ++operationIdRef.current;
     setIsGenerating(true);
+    setGenerationError('');
     setCommandHistory((prev) => [...prev, `System: Loading template "${template.name}"...`]);
 
     try {
@@ -83,6 +139,7 @@ export default function Home() {
         setCommandHistory((prev) => [...prev, 'Success: Loaded template via client-side engine.']);
       }
 
+      if (operationId !== operationIdRef.current) return;
       // Create new project file
       const newProj: ProjectFile = {
         id: Math.random().toString(36).slice(2, 11),
@@ -96,40 +153,39 @@ export default function Home() {
       setProjects((prev) => [newProj, ...prev]);
       setSelectedProject(newProj);
       setGeometry(geom);
+      setGenerationMethod('Template geometry');
       
       // Initialize layers list
-      const layerList = geom.layers.map((l) => ({
-        name: l.name,
-        color: l.color,
-        description: l.description,
-        visible: true,
-        locked: false,
-      }));
-      setLayers(layerList);
+      setLayers(layersForGeometry(geom));
 
     } catch (e) {
+      if (operationId !== operationIdRef.current) return;
       const msg = e instanceof Error ? e.message : 'Unknown error';
+      setGenerationError(msg);
       setCommandHistory((prev) => [...prev, `Error: Failed to load template. ${msg}`]);
     } finally {
-      setIsGenerating(false);
+      if (operationId === operationIdRef.current) setIsGenerating(false);
     }
   };
 
   // Generate or modify drawing from prompt
   const handleGeneratePrompt = async (prompt: string) => {
+    const operationId = ++operationIdRef.current;
     setIsGenerating(true);
+    setGenerationError('');
     setCommandHistory((prev) => [...prev, `Command: ${prompt}`]);
 
     const activeType = selectedProject?.object_type || 'open_pit';
     const activeProps = selectedProject?.properties || {};
 
     try {
+      if (activeProps.data_source) throw new Error('Imported survey data is read-only. Select a template to create a conceptual design.');
       let geom: GeometryData;
       let parsedType = activeType;
       let parsedParams = { ...activeProps };
 
       if (aiConfig.provider !== 'local') {
-        // Run AI API call
+        // Hosted API calls either use the selected provider or return an explicit error.
         try {
           const res = await apiClient.generateFromPrompt(
             prompt,
@@ -137,13 +193,15 @@ export default function Home() {
             aiConfig.model,
             aiConfig.baseUrl,
             aiConfig.apiKey,
-            activeProps
+            { ...activeProps, _object_type: activeType }
           );
+          if (operationId !== operationIdRef.current) return;
 
           if (res.success) {
             geom = res.geometry;
             parsedType = res.object_type;
             parsedParams = res.params;
+            setGenerationMethod(res.parse_method === 'deepseek' ? 'DeepSeek AI interpretation' : 'Parameter edit');
             setCommandHistory((prev) => [
               ...prev,
               `Success: AI generated geometry. Parse method: ${res.parse_method}`,
@@ -155,47 +213,27 @@ export default function Home() {
             throw new Error(res.error);
           }
         } catch (err) {
-          console.warn('AI API Call failed, trying client-side DeepSeek / fallback:', err);
-          let clientParsed = null;
-          if (aiConfig.provider === 'deepseek') {
-            clientParsed = await clientGeometry.parseWithDeepSeekClient(
-              prompt,
-              aiConfig.apiKey,
-              aiConfig.model || 'deepseek-chat',
-              aiConfig.baseUrl || 'https://api.deepseek.com'
-            );
-          }
-          if (!clientParsed) {
-            clientParsed = clientGeometry.parsePromptLocal(prompt);
-          }
-          parsedType = clientParsed.object_type ?? activeType;
-          parsedParams = { ...activeProps, ...clientParsed.params };
-          geom = clientGeometry.generateGeometry(parsedType, parsedParams);
-          setCommandHistory((prev) => [
-            ...prev,
-            'System: Fallback to client-side geometry parser completed.',
-          ]);
-          const interp = 'interpretation' in clientParsed && clientParsed.interpretation
-            ? clientParsed.interpretation
-            : clientGeometry.buildInterpretation(parsedType, parsedParams);
-          setParseNote({ id: Date.now(), text: interp });
+          throw new Error(`Selected AI provider failed: ${err instanceof Error ? err.message : String(err)}. Switch to Local to use rule-based generation.`);
         }
       } else {
         // Run client-side parsing (local NLP rules, v2 — parity with backend)
-        const editProps = clientGeometry.parseEditCommand(prompt, activeProps);
+        const editProps = clientGeometry.parseEditCommand(prompt, { ...activeProps, _object_type: activeType });
         if (editProps) {
           parsedParams = editProps;
         } else {
           const clientParsed = clientGeometry.parsePromptLocal(prompt);
+          if (!clientParsed.recognized) throw new Error('I could not identify a design type or parameter. Try an example prompt or choose a template.');
           parsedType = clientParsed.object_type ?? activeType;
           parsedParams = { ...activeProps, ...clientParsed.params };
           setParseNote({ id: Date.now(), text: clientParsed.interpretation });
         }
 
         geom = clientGeometry.generateGeometry(parsedType, parsedParams);
+        setGenerationMethod('Local rule-based interpretation');
         setCommandHistory((prev) => [...prev, 'Success: Render updated local CAD design.']);
       }
 
+      if (operationId !== operationIdRef.current) return;
       // Update active project
       const updatedProj: ProjectFile = {
         id: selectedProject?.id || Math.random().toString(36).slice(2, 11),
@@ -203,10 +241,11 @@ export default function Home() {
         object_type: parsedType,
         created_at: selectedProject?.created_at || new Date().toISOString(),
         geometry: geom,
-        properties: parsedParams,
+        properties: geom.properties,
       };
 
       if (selectedProject) {
+        recordEdit(selectedProject);
         setProjects((prev) => prev.map((p) => (p.id === selectedProject.id ? updatedProj : p)));
       } else {
         setProjects((prev) => [updatedProj, ...prev]);
@@ -214,26 +253,15 @@ export default function Home() {
       setSelectedProject(updatedProj);
       setGeometry(geom);
 
-      // Merge layers (computed inside the updater to avoid stale-closure duplicates)
-      setLayers((prev) => {
-        const existingNames = new Set(prev.map((l) => l.name));
-        const newLayers = geom.layers
-          .filter((l) => !existingNames.has(l.name))
-          .map((l) => ({
-            name: l.name,
-            color: l.color,
-            description: l.description,
-            visible: true,
-            locked: false,
-          }));
-        return newLayers.length > 0 ? [...prev, ...newLayers] : prev;
-      });
+      setLayers(prev => layersForGeometry(geom, prev));
 
     } catch (e) {
+      if (operationId !== operationIdRef.current) return;
       const msg = e instanceof Error ? e.message : 'Unknown error';
+      setGenerationError(msg);
       setCommandHistory((prev) => [...prev, `Error: Prompt processing failed. ${msg}`]);
     } finally {
-      setIsGenerating(false);
+      if (operationId === operationIdRef.current) setIsGenerating(false);
     }
   };
 
@@ -244,6 +272,7 @@ export default function Home() {
   const pendingUpdateRef = useRef<{ project: ProjectFile; params: Record<string, unknown> } | null>(null);
 
   const applyPropertyUpdate = async (project: ProjectFile, newParams: Record<string, unknown>) => {
+    const operationId = operationIdRef.current;
     try {
       let geom: GeometryData;
 
@@ -263,24 +292,31 @@ export default function Home() {
         geom = clientGeometry.generateGeometry(project.object_type, newParams);
       }
 
+      if (operationId !== operationIdRef.current) return;
       const updatedProj: ProjectFile = {
         ...project,
         geometry: geom,
-        properties: newParams,
+        properties: geom.properties,
       };
 
+      recordEdit(project);
       setProjects((prev) => prev.map((p) => (p.id === project.id ? updatedProj : p)));
       setSelectedProject(updatedProj);
       setGeometry(geom);
+      setLayers(prev => layersForGeometry(geom, prev));
 
     } catch (e) {
       console.error(e);
+      if (operationId === operationIdRef.current) setGenerationError(e instanceof Error ? e.message : 'Could not update the design.');
     }
   };
 
   const handleUpdateProperties = (newParams: Record<string, unknown>) => {
     const project = selectedProject;
     if (!project) return;
+    if (project.properties.data_source) return;
+    operationIdRef.current++;
+    setIsGenerating(false);
     pendingUpdateRef.current = { project, params: newParams };
     if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     updateTimeoutRef.current = setTimeout(() => {
@@ -317,7 +353,7 @@ export default function Home() {
         'Available CLI Console commands:',
         '  deepseek <query>          - Ask DeepSeek AI directly in terminal console',
         '  deepseek key <sk-...>     - Set DeepSeek API key & activate provider',
-        '  set provider <name>       - Set active provider (deepseek|local|ollama|huggingface)',
+        '  set provider <name>       - Set active provider (deepseek|local)',
         '  clear                     - Clear terminal console history',
         '  help                      - List available instructions',
         '  bench_height <number>     - Set bench height (open pit)',
@@ -380,33 +416,6 @@ export default function Home() {
         if (res.success && res.response) {
           setCommandHistory((prev) => [...prev, `DeepSeek: ${res.response}`]);
         } else {
-          // Direct browser fallback if backend endpoint is unavailable
-          if (aiConfig.apiKey) {
-            const url = (aiConfig.baseUrl || 'https://api.deepseek.com').replace(/\/$/, '') + '/chat/completions';
-            const browserRes = await fetch(url, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${aiConfig.apiKey}`,
-              },
-              body: JSON.stringify({
-                model: aiConfig.model || 'deepseek-chat',
-                messages: [
-                  {
-                    role: 'system',
-                    content: 'You are DeepSeek AI integrated into MineCAD AI Terminal Console. Assist mining engineers with concise calculations and answers.'
-                  },
-                  { role: 'user', content: query }
-                ],
-              }),
-            });
-            if (browserRes.ok) {
-              const data = await browserRes.json();
-              const txt = data.choices?.[0]?.message?.content || 'No response from DeepSeek API.';
-              setCommandHistory((prev) => [...prev, `DeepSeek: ${txt}`]);
-              return;
-            }
-          }
           setCommandHistory((prev) => [
             ...prev,
             `Error: DeepSeek terminal request failed. ${res.error || 'Please check your DeepSeek API Key in settings.'}`,
@@ -423,7 +432,7 @@ export default function Home() {
     // Set provider command
     if (cmd === 'set' && args.length >= 3 && args[1].toLowerCase() === 'provider') {
       const p = args[2].toLowerCase();
-      if (['local', 'deepseek', 'ollama', 'huggingface'].includes(p)) {
+      if (['local', 'deepseek'].includes(p)) {
         setAiConfig((prev) => ({ ...prev, provider: p as AppState['aiConfig']['provider'] }));
         setCommandHistory((prev) => [...prev, `Command: set provider ${p}`, `System: Active AI provider switched to ${p.toUpperCase()}.`]);
         return;
@@ -506,7 +515,12 @@ export default function Home() {
 
     // Drawing-sheet chrome (frame, title block, north arrow, scale bar) is
     // included in the 2D vector exports when sheet mode is ON.
-    let exportGeom = geometry;
+    const hiddenLayers = new Set(layers.filter(l => !l.visible).map(l => l.name));
+    let exportGeom: GeometryData = {
+      ...geometry,
+      primitives: geometry.primitives.filter(p => !hiddenLayers.has(p.layer)),
+      meshes: geometry.meshes.filter(m => !m.layer || !hiddenLayers.has(m.layer)),
+    };
     if (sheetMode && (format === 'svg' || format === 'pdf')) {
       const frame = buildSheetFrame(geometry, {
         projectName: selectedProject?.name ?? 'Untitled',
@@ -514,39 +528,36 @@ export default function Home() {
       });
       exportGeom = {
         ...geometry,
-        primitives: [...geometry.primitives, ...frame.primitives],
+          primitives: [...exportGeom.primitives, ...frame.primitives],
         bounds: frame.bounds,
       };
     }
 
     try {
-      if (aiConfig.provider !== 'local') {
-        // Try backend export first
-        try {
-          const blob = await apiClient.exportFile(format, exportGeom);
-          apiClient.downloadBlob(blob, `minecad_export.${format}`);
-          setCommandHistory((prev) => [...prev, `Success: Exported minecad_export.${format} via backend.`]);
-          return;
-        } catch (err) {
-          console.warn('Backend export failed, falling back to client-side SVG/OBJ/STL downloader:', err);
-        }
+      try {
+        const blob = await apiClient.exportFile(format, exportGeom);
+        apiClient.downloadBlob(blob, `minecad_export.${format}`);
+        setCommandHistory((prev) => [...prev, `Success: Exported minecad_export.${format}.`]);
+        return;
+      } catch (err) {
+        console.warn('Export API unavailable; using offline exporter:', err);
       }
 
-      // Client-side fallback exporter
+      // All formats remain available while offline.
       if (format === 'obj') {
-        const data = clientGeometryExporterOBJ(geometry);
+        const data = exportOBJ(exportGeom);
         apiClient.downloadText(data, 'minecad_export.obj', 'text/plain');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.obj (client-side).']);
       } else if (format === 'stl') {
-        const data = clientGeometryExporterSTL(geometry);
+        const data = exportSTL(exportGeom);
         apiClient.downloadText(data, 'minecad_export.stl', 'application/octet-stream');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.stl (client-side).']);
       } else if (format === 'svg') {
-        const data = clientGeometryExporterSVG(exportGeom);
+        const data = exportSVG(exportGeom);
         apiClient.downloadText(data, 'minecad_export.svg', 'image/svg+xml');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.svg (client-side).']);
       } else if (format === 'dxf') {
-        const data = clientGeometryExporterDXF(geometry);
+        const data = exportDXF(exportGeom);
         apiClient.downloadText(data, 'minecad_export.dxf', 'application/dxf');
         setCommandHistory((prev) => [...prev, 'Success: Exported minecad_export.dxf (client-side).']);
       } else if (format === 'pdf') {
@@ -562,167 +573,102 @@ export default function Home() {
     }
   };
 
-  // Client-side DXF exporter
-  const clientGeometryExporterDXF = (geom: GeometryData) => {
-    const lines = [
-      '0', 'SECTION', '2', 'HEADER', '0', 'ENDSEC',
-      '0', 'SECTION', '2', 'TABLES', '0', 'ENDSEC',
-      '0', 'SECTION', '2', 'ENTITIES',
-    ];
-
-    for (const prim of geom.primitives) {
-      const layer = prim.layer || '0';
-      const col = prim.color || 7;
-      if (prim.type === 'line') {
-        lines.push('0', 'LINE', '8', layer, '62', String(col));
-        lines.push('10', String(prim.x1), '20', String(prim.y1), '30', '0.0');
-        lines.push('11', String(prim.x2), '21', String(prim.y2), '31', '0.0');
-      } else if (prim.type === 'polyline') {
-        lines.push('0', 'LWPOLYLINE', '8', layer, '62', String(col));
-        lines.push('90', String(prim.points.length), '70', prim.closed ? '1' : '0');
-        for (const p of prim.points) {
-          lines.push('10', String(p.x), '20', String(p.y));
-        }
-      } else if (prim.type === 'circle') {
-        lines.push('0', 'CIRCLE', '8', layer, '62', String(col));
-        lines.push('10', String(prim.cx), '20', String(prim.cy), '30', '0.0');
-        lines.push('40', String(prim.r));
-      } else if (prim.type === 'text') {
-        lines.push('0', 'TEXT', '8', layer, '62', String(col));
-        lines.push('10', String(prim.x), '20', String(prim.y), '30', '0.0');
-        lines.push('40', String(prim.height || 2), '1', prim.text);
-      }
-    }
-
-    lines.push('0', 'ENDSEC', '0', 'EOF');
-    return lines.join('\n');
-  };
-
-  // Client-side SVG exporter
-  const escapeXml = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  const clientGeometryExporterSVG = (geom: GeometryData) => {
-    const { bounds } = geom;
-    const margin = 20;
-    // Guard against NaN/degenerate bounds so the viewBox stays valid
-    const minX = Number.isFinite(bounds.minX) ? bounds.minX : -200;
-    const maxX = Number.isFinite(bounds.maxX) ? bounds.maxX : 200;
-    const minY = Number.isFinite(bounds.minY) ? bounds.minY : -200;
-    const maxY = Number.isFinite(bounds.maxY) ? bounds.maxY : 200;
-    const w = Math.max(maxX - minX, 1) + margin * 2;
-    const h = Math.max(maxY - minY, 1) + margin * 2;
-    const parts = [
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX - margin} ${-maxY - margin} ${w} ${h}" width="800" height="600" style="background:#0d1117;">`
-    ];
-
-    const DXF_COLORS: Record<number, string> = {
-      1: '#ff4d4d', 2: '#ffeb3b', 3: '#4caf50', 4: '#00bcd4',
-      5: '#2196f3', 6: '#e91e63', 7: '#ffffff', 8: '#9e9e9e'
-    };
-
-    for (const prim of geom.primitives) {
-      const col = DXF_COLORS[prim.color] || '#ffffff';
-      if (prim.type === 'line') {
-        parts.push(`<line x1="${prim.x1}" y1="${-prim.y1}" x2="${prim.x2}" y2="${-prim.y2}" stroke="${col}" stroke-width="0.8" />`);
-      } else if (prim.type === 'polyline') {
-        const pts = prim.points.map(p => `${p.x},${-p.y}`).join(' ');
-        const tag = prim.closed ? 'polygon' : 'polyline';
-        const fill = prim.closed ? `${col}15` : 'none';
-        parts.push(`<${tag} points="${pts}" stroke="${col}" stroke-width="0.8" fill="${fill}" />`);
-      } else if (prim.type === 'circle') {
-        parts.push(`<circle cx="${prim.cx}" cy="${-prim.cy}" r="${prim.r}" stroke="${col}" stroke-width="0.8" fill="none" />`);
-      } else if (prim.type === 'text') {
-        parts.push(`<text x="${prim.x}" y="${-prim.y}" fill="${col}" font-size="${prim.height}" font-family="monospace">${escapeXml(prim.text)}</text>`);
-      } else if (prim.type === 'dimension') {
-        parts.push(`<line x1="${prim.x1}" y1="${-prim.y1}" x2="${prim.x2}" y2="${-prim.y2}" stroke="${col}" stroke-width="0.5" stroke-dasharray="2,2" />`);
-      }
-    }
-    parts.push('</svg>');
-    return parts.join('\n');
-  };
-
-  // Client-side OBJ exporter
-  const clientGeometryExporterOBJ = (geom: GeometryData) => {
-    const lines = ['# MineCAD AI - Client OBJ Export', ''];
-    let vOffset = 0;
-    for (const mesh of geom.meshes) {
-      lines.push(`o ${mesh.name}`);
-      for (const v of mesh.vertices) {
-        lines.push(`v ${v[0].toFixed(4)} ${v[2].toFixed(4)} ${(-v[1]).toFixed(4)}`);
-      }
-      for (const face of mesh.indices) {
-        lines.push(`f ${face[0] + 1 + vOffset} ${face[1] + 1 + vOffset} ${face[2] + 1 + vOffset}`);
-      }
-      vOffset += mesh.vertices.length;
-      lines.push('');
-    }
-    return lines.join('\n');
-  };
-
-  // Client-side STL exporter
-  const clientGeometryExporterSTL = (geom: GeometryData) => {
-    const lines = ['solid MineCAD_AI'];
-    for (const mesh of geom.meshes) {
-      const v = mesh.vertices;
-      for (const face of mesh.indices) {
-        const v0 = v[face[0]], v1 = v[face[1]], v2 = v[face[2]];
-        lines.push('  facet normal 0.000000 0.000000 0.000000');
-        lines.push('    outer loop');
-        lines.push(`      vertex ${v0[0].toFixed(6)} ${v0[2].toFixed(6)} ${(-v0[1]).toFixed(6)}`);
-        lines.push(`      vertex ${v1[0].toFixed(6)} ${v1[2].toFixed(6)} ${(-v1[1]).toFixed(6)}`);
-        lines.push(`      vertex ${v2[0].toFixed(6)} ${v2[2].toFixed(6)} ${(-v2[1]).toFixed(6)}`);
-        lines.push('    endloop');
-        lines.push('  endfacet');
-      }
-    }
-    lines.push('endsolid MineCAD_AI');
-    return lines.join('\n');
-  };
-
   // Switch project files from sidebar selection
   const handleSelectProject = (proj: ProjectFile) => {
+    operationIdRef.current++;
+    setIsGenerating(false);
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    pendingUpdateRef.current = null;
     setSelectedProject(proj);
     setGeometry(proj.geometry);
     if (proj.geometry) {
-      setLayers(
-        proj.geometry.layers.map((l) => ({
-          name: l.name,
-          color: l.color,
-          description: l.description,
-          visible: true,
-          locked: false,
-        }))
-      );
+      setLayers(layersForGeometry(proj.geometry));
     }
     setCommandHistory((prev) => [...prev, `System: Loaded workspace "${proj.name}".`]);
   };
 
-  // Auto-load open pit template on first load
-  useEffect(() => {
-    const defaultTemplate = TEMPLATES.find((t) => t.id === 'open_pit');
-    if (defaultTemplate) {
-      handleLoadTemplate(defaultTemplate);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleRenameProject = (project: ProjectFile, rawName: string) => {
+    const name = rawName.trim().slice(0, 120);
+    if (!name || name === project.name) return;
+    const updated = { ...project, name };
+    setProjects(prev => prev.map(p => p.id === project.id ? updated : p));
+    if (selectedProject?.id === project.id) setSelectedProject(updated);
+  };
 
-  // Seed 3 sample projects on first visit (once, persisted via localStorage)
-  useEffect(() => {
+  const handleDuplicateProject = (project: ProjectFile) => {
+    const copy = { ...project, id: crypto.randomUUID(), name: `${project.name} copy`, created_at: new Date().toISOString() };
+    setProjects(prev => [copy, ...prev]);
+    handleSelectProject(copy);
+  };
+
+  const handleDeleteProject = (project: ProjectFile) => {
+    if (!window.confirm(`Delete "${project.name}" from this browser? Download a project file first if you need a backup.`)) return;
+    if (selectedProject?.id === project.id) {
+      operationIdRef.current++;
+      setIsGenerating(false);
+      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+      pendingUpdateRef.current = null;
+    }
+    const remaining = projects.filter(p => p.id !== project.id);
+    setProjects(remaining);
+    if (selectedProject?.id === project.id) {
+      const next = remaining[0] || null;
+      setSelectedProject(next);
+      setGeometry(next?.geometry || null);
+      setLayers(next?.geometry ? layersForGeometry(next.geometry) : []);
+    }
+  };
+
+  const handleDownloadProject = (project: ProjectFile) => {
+    const filename = `${project.name.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 60) || 'minecad-project'}.minecad.json`;
+    apiClient.downloadText(JSON.stringify({ version: 1, project }, null, 2), filename, 'application/json');
+  };
+
+  const handleImportProject = async (file: File) => {
     try {
-      if (localStorage.getItem('minecad-samples-seeded')) return;
+      if (file.size > 25_000_000) throw new Error('Project file exceeds the 25 MB import limit.');
+      const data = JSON.parse(await file.text());
+      const incoming = data.project || data;
+      if (!isProjectFile(incoming)) throw new Error('This is not a MineCAD project file.');
+      const project = { ...incoming, id: crypto.randomUUID(), name: incoming.name.slice(0, 120), created_at: new Date().toISOString() };
+      setProjects(prev => [project, ...prev]);
+      handleSelectProject(project);
+      setWorkspaceError('');
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : 'Could not import the project.');
+    }
+  };
+
+  const handleImportSurvey = async (file: File) => {
+    try {
+      if (file.size > 500_000) throw new Error('Survey CSV exceeds the 500 KB import limit.');
+      const project = importSurveyCsv(await file.text(), file.name);
+      setProjects(prev => [project, ...prev]);
+      handleSelectProject(project);
+      setWorkspaceError('');
+      setGenerationMethod('Imported survey CSV (unverified)');
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : 'Could not import the survey CSV.');
+    }
+  };
+
+  // Restore real project data, including geometry. Seed demonstrations only on
+  // the first visit; the earlier sample flag caused them to vanish on reload.
+  useEffect(() => {
+    let cancelled = false;
+    const seed = () => {
       const samples: Array<{ name: string; object_type: string; params: Record<string, unknown> }> = [
-        { name: 'Sample: Open Pit Copper', object_type: 'open_pit',
+        { name: 'Demo: Open Pit Copper', object_type: 'open_pit',
           params: { bench_height: 10, bench_width: 8, num_benches: 6, pit_length: 400, pit_width: 250, haul_road_width: 24, overall_slope: 50, batter_angle: 72 } },
-        { name: 'Sample: Room & Pillar Coal', object_type: 'room_and_pillar',
+        { name: 'Demo: Room & Pillar Coal', object_type: 'room_and_pillar',
           params: { room_width: 6, pillar_width: 9, num_rooms_x: 6, num_rooms_y: 4, room_height: 3, entry_width: 5 } },
-        { name: 'Sample: Longwall Panel', object_type: 'longwall_panel',
+        { name: 'Demo: Longwall Panel', object_type: 'longwall_panel',
           params: { face_width: 180, panel_length: 600, seam_height: 3.2, num_supports: 120, shearer_position: 65 } },
       ];
-      const seeded: ProjectFile[] = samples.map((s) => {
+      const seeded: ProjectFile[] = samples.map((s, i) => {
         const geom = clientGeometry.generateGeometry(s.object_type, s.params);
         return {
-          id: `sample-${s.object_type}`,
+          id: `demo-${i}`,
           name: s.name,
           object_type: s.object_type,
           created_at: new Date().toISOString(),
@@ -730,15 +676,38 @@ export default function Home() {
           properties: geom.properties,
         };
       });
-      setProjects((prev) => [...seeded, ...prev]);
-      localStorage.setItem('minecad-samples-seeded', '1');
-    } catch (e) {
-      console.warn('Sample seeding failed:', e);
-    }
+      const selected = seeded[0];
+      setProjects(seeded);
+      setSelectedProject(selected);
+      setGeometry(selected.geometry);
+      setLayers(layersForGeometry(selected.geometry!));
+    };
+    loadWorkspace().then(saved => {
+      if (cancelled) return;
+      const valid = saved?.projects?.filter(isProjectFile) || [];
+      if (saved && Array.isArray(saved.projects)) {
+        const selected = valid.find(p => p.id === saved.selectedId) || valid[0] || null;
+        setProjects(valid);
+        setSelectedProject(selected);
+        setGeometry(selected?.geometry || null);
+        setLayers(selected?.geometry ? layersForGeometry(selected.geometry) : []);
+      } else seed();
+    }).catch(() => {
+      if (!cancelled) { seed(); setWorkspaceError('Automatic saving is unavailable in this browser. Download project files to keep your work.'); }
+    }).finally(() => { if (!cancelled) setWorkspaceReady(true); });
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    saveWorkspace({ projects, selectedId: selectedProject?.id || null })
+      .then(() => setWorkspaceError(''))
+      .catch(() => setWorkspaceError('Automatic saving failed. Download your project file now.'));
+  }, [projects, selectedProject?.id, workspaceReady]);
 
   return (
     <div className="h-dvh w-screen flex flex-col overflow-hidden bg-bg-base text-fg">
+      {workspaceError && <div role="alert" className="px-3 py-1.5 text-xs bg-danger/15 text-danger">{workspaceError}</div>}
       {/* Top Toolbar */}
       <Toolbar
         activeView={activeView}
@@ -756,6 +725,10 @@ export default function Home() {
         isGenerating={isGenerating}
         sheetMode={sheetMode}
         setSheetMode={setSheetMode}
+        onUndo={() => restoreEdit('undo')}
+        onRedo={() => restoreEdit('redo')}
+        canUndo={Boolean(selectedProject && editHistory.current[selectedProject.id]?.past.length)}
+        canRedo={Boolean(selectedProject && editHistory.current[selectedProject.id]?.future.length)}
       />
 
       {/* Main workspace layout */}
@@ -767,6 +740,12 @@ export default function Home() {
             selectedProject={selectedProject}
             onSelectProject={handleSelectProject}
             onLoadTemplate={handleLoadTemplate}
+            onRenameProject={handleRenameProject}
+            onDeleteProject={handleDeleteProject}
+            onDuplicateProject={handleDuplicateProject}
+            onDownloadProject={handleDownloadProject}
+            onImportProject={handleImportProject}
+            onImportSurvey={handleImportSurvey}
             collapsed={leftCollapsed}
             setCollapsed={setLeftCollapsed}
           />
@@ -780,12 +759,18 @@ export default function Home() {
               onClick={() => setLeftDrawerOpen(false)}
               aria-hidden
             />
-            <div className="fixed inset-y-0 left-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-r border-edge shadow-[var(--shadow-pop)] md:hidden">
+            <div role="dialog" aria-modal="true" aria-label="Projects and templates" className="fixed inset-y-0 left-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-r border-edge shadow-[var(--shadow-pop)] md:hidden">
               <LeftSidebar
                 projects={projects}
                 selectedProject={selectedProject}
                 onSelectProject={(p) => { handleSelectProject(p); setLeftDrawerOpen(false); }}
                 onLoadTemplate={(t) => { handleLoadTemplate(t); setLeftDrawerOpen(false); }}
+                onRenameProject={handleRenameProject}
+                onDeleteProject={handleDeleteProject}
+                onDuplicateProject={handleDuplicateProject}
+                onDownloadProject={handleDownloadProject}
+                onImportProject={handleImportProject}
+                onImportSurvey={handleImportSurvey}
                 collapsed={false}
                 setCollapsed={() => setLeftDrawerOpen(false)}
               />
@@ -794,9 +779,9 @@ export default function Home() {
         )}
 
         {/* Center Viewports + CLI / AI Box */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-bg-base min-w-0">
+        <div className="flex-1 flex flex-col overflow-y-auto md:overflow-hidden bg-bg-base min-w-0">
           {/* Canvas area */}
-          <div className="flex-1 relative bg-bg-base border-b border-edge min-h-[280px]">
+          <div className="relative shrink-0 h-[min(42dvh,320px)] md:h-auto md:flex-1 bg-bg-base border-b border-edge min-h-[180px] md:min-h-[280px]">
             {activeView === '2d' ? (
               <Canvas2D
                 geometry={geometry}
@@ -809,6 +794,7 @@ export default function Home() {
             ) : (
               <Viewport3D
                 geometry={geometry}
+                layers={layers}
                 viewMode={viewMode3D}
                 showSectionView={showSectionView}
                 sectionHeight={sectionHeight}
@@ -828,6 +814,8 @@ export default function Home() {
             onGenerate={handleGeneratePrompt}
             isGenerating={isGenerating}
             note={parseNote}
+            error={generationError}
+            method={generationMethod}
           />
         </div>
 
@@ -851,7 +839,7 @@ export default function Home() {
               onClick={() => setRightDrawerOpen(false)}
               aria-hidden
             />
-            <div className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] md:hidden">
+            <div role="dialog" aria-modal="true" aria-label="Properties and layers" className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] md:hidden">
               <RightSidebar
                 geometry={geometry}
                 layers={layers}

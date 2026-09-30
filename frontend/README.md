@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MineCAD AI frontend
 
-## Getting Started
+Next.js app for conceptual mining CAD drawings. The hosted app includes its own
+`/api/health`, `/api/generate`, `/api/generate-direct`, `/api/export`, and
+`/api/deepseek/chat` routes; no separate Python deployment is needed for the
+website.
 
-First, run the development server:
+## Run and verify
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint
+npm run build
+npm run smoke
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The smoke check starts the production build locally and checks health,
+generation, invalid prompts, and all five export formats.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data and providers
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Projects are automatically saved in browser IndexedDB. Users can download
+  and import MineCAD project JSON files for backups and sharing.
+- Survey station CSV files can be imported with `station,easting,northing,elevation`
+  columns. The app does not verify datum, measurements, or engineering accuracy.
+- Local generation uses explicit rule-based parsing and works offline after
+  the app shell has been cached. DeepSeek is optional and needs a user-supplied
+  API key; the key remains in tab memory and is forwarded through a fixed
+  same-origin API route for each request.
+- Templates, contour maps, and derived engineering quantities are conceptual
+  demonstrations. There is no site-specific slope stability analysis.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy the `frontend/` directory as a Next.js project on Vercel. The old
+`NEXT_PUBLIC_BACKEND_URL` proxy is no longer used.

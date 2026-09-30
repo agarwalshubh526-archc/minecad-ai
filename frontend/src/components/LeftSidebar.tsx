@@ -100,12 +100,12 @@ function TemplateIcon({ id }: { id: string }) {
 const TEMPLATES: MineTemplate[] = [
   {
     id: 'survey_traverse', name: 'Mine Survey Traverse', category: 'Mine Surveying', icon: '📐',
-    object_type: 'mine_survey_traverse', description: 'Total station control loop & coordinates',
+    object_type: 'mine_survey_traverse', description: 'Synthetic control loop demonstration',
     defaultParams: { num_stations: 5, starting_easting: 1000, starting_northing: 2000, starting_elevation: 150, avg_segment_len: 80 },
   },
   {
     id: 'topo_contours', name: 'Topographic Contours', category: 'Mine Surveying', icon: '🗺️',
-    object_type: 'topographic_contours', description: 'DTM surface elevation contour map',
+    object_type: 'topographic_contours', description: 'Synthetic terrain demonstration',
     defaultParams: { contour_interval: 5, grid_size_x: 300, grid_size_y: 200, min_elevation: 100, max_elevation: 160 },
   },
   {
@@ -160,12 +160,20 @@ interface LeftSidebarProps {
   selectedProject: ProjectFile | null;
   onSelectProject: (p: ProjectFile) => void;
   onLoadTemplate: (t: MineTemplate) => void;
+  onRenameProject: (p: ProjectFile, name: string) => void;
+  onDeleteProject: (p: ProjectFile) => void;
+  onDuplicateProject: (p: ProjectFile) => void;
+  onDownloadProject: (p: ProjectFile) => void;
+  onImportProject: (file: File) => void;
+  onImportSurvey: (file: File) => void;
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
 }
 
-export default function LeftSidebar({ projects, selectedProject, onSelectProject, onLoadTemplate, collapsed, setCollapsed }: LeftSidebarProps) {
+export default function LeftSidebar({ projects, selectedProject, onSelectProject, onLoadTemplate, onRenameProject, onDeleteProject, onDuplicateProject, onDownloadProject, onImportProject, onImportSurvey, collapsed, setCollapsed }: LeftSidebarProps) {
   const [activeTab, setActiveTab] = React.useState<'templates' | 'projects'>('templates');
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingName, setEditingName] = React.useState('');
 
   if (collapsed) {
     return (
@@ -222,6 +230,7 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {activeTab === 'templates' && (
           <div className="p-2 space-y-1">
+            <p className="text-[11px] text-warn px-2 py-2">Templates use demonstration geometry and assumed values. Import measured survey CSV data from Projects.</p>
             {(['Mine Surveying', 'Surface Mining', 'Geotechnical & Earthworks', 'Underground', 'Infrastructure', 'Drilling & Blasting'] as const).map(cat => {
               const items = TEMPLATES.filter(t => t.category === cat);
               if (items.length === 0) return null;
@@ -253,6 +262,23 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
 
         {activeTab === 'projects' && (
           <div className="p-2">
+            <label className="btn flex items-center justify-center w-full mb-2 cursor-pointer text-xs">
+              Import project JSON
+              <input type="file" accept=".json,.minecad.json,application/json" className="sr-only" onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) onImportProject(file);
+                e.currentTarget.value = '';
+              }} />
+            </label>
+            <label className="btn flex items-center justify-center w-full mb-2 cursor-pointer text-xs">
+              Import survey CSV
+              <input type="file" accept=".csv,text/csv" className="sr-only" onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) onImportSurvey(file);
+                e.currentTarget.value = '';
+              }} />
+            </label>
+            <p className="text-[10px] text-fg-faint px-1 mb-3">CSV columns: station, easting, northing, elevation. Check datum and units before use.</p>
             {projects.length === 0 ? (
               <div className="text-center py-10">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 mx-auto text-fg-faint mb-2" aria-hidden="true">
@@ -264,16 +290,28 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
             ) : (
               <div className="space-y-1 pt-1">
                 {projects.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectProject(p)}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors ${
-                      selectedProject?.id === p.id ? 'bg-accent-dim border border-edge-accent' : 'hover:bg-surface-hover border border-transparent'
-                    }`}
-                  >
-                    <div className="text-xs text-fg truncate">{p.name}</div>
-                    <div className="text-[9px] text-fg-faint mt-0.5 truncate">{p.object_type} • {new Date(p.created_at).toLocaleTimeString()}</div>
-                  </button>
+                  <div key={p.id} className={`rounded-lg border p-1 ${selectedProject?.id === p.id ? 'bg-accent-dim border-edge-accent' : 'border-transparent hover:bg-surface-hover'}`}>
+                    {editingId === p.id ? (
+                      <input autoFocus value={editingName} maxLength={120} className="input w-full text-xs" aria-label="Project name"
+                        onChange={e => setEditingName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { onRenameProject(p, editingName); setEditingId(null); }
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        onBlur={() => { onRenameProject(p, editingName); setEditingId(null); }} />
+                    ) : (
+                      <button onClick={() => onSelectProject(p)} className="w-full text-left px-1.5 py-1">
+                        <div className="text-xs text-fg truncate">{p.name}</div>
+                        <div className="text-[10px] text-fg-faint mt-0.5 truncate">{p.object_type.replaceAll('_', ' ')} · {new Date(p.created_at).toLocaleTimeString()}</div>
+                      </button>
+                    )}
+                    <div className="flex gap-1 px-1.5 pb-1">
+                      <button className="btn px-1.5 py-0.5 text-[10px]" title={`Rename ${p.name}`} aria-label={`Rename ${p.name}`} onClick={() => { setEditingId(p.id); setEditingName(p.name); }}>Rename</button>
+                      <button className="btn px-1.5 py-0.5 text-[10px]" title={`Duplicate ${p.name}`} aria-label={`Duplicate ${p.name}`} onClick={() => onDuplicateProject(p)}>Copy</button>
+                      <button className="btn px-1.5 py-0.5 text-[10px]" title={`Download ${p.name}`} aria-label={`Download ${p.name}`} onClick={() => onDownloadProject(p)}>Save file</button>
+                      <button className="btn px-1.5 py-0.5 text-[10px] text-danger" title={`Delete ${p.name}`} aria-label={`Delete ${p.name}`} onClick={() => onDeleteProject(p)}>Delete</button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

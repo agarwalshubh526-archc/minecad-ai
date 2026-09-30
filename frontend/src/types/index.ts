@@ -136,7 +136,7 @@ export interface ProjectFile {
 }
 
 export interface AIConfig {
-  provider: 'local' | 'ollama' | 'huggingface' | 'deepseek';
+  provider: 'local' | 'deepseek';
   model: string;
   baseUrl: string;
   apiKey: string;

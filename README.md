@@ -5,7 +5,7 @@ MineCAD AI is an AI-assisted CAD web app for mining engineering: describe a desi
 ## Architecture
 
 - **`backend/`** — Python FastAPI service. Parses prompts with local regex NLP rules or an LLM provider (Ollama, HuggingFace, DeepSeek — API keys are sent per-request, never stored server-side), generates parametric geometry (2D primitives + 3D meshes), and exports CAD files. Includes an SSRF whitelist for provider URLs, input clamping, and XML escaping on export.
-- **`frontend/`** — Next.js app (React Three Fiber viewport, 2D canvas, command-line terminal). Talks to the backend over a Next.js rewrite proxy; when the backend is unreachable it falls back to generating equivalent geometry client-side.
+- **`frontend/`** — Next.js app (React Three Fiber viewport, 2D canvas, command-line terminal). The hosted website includes same-origin API routes for generation, export, and optional DeepSeek requests. See `frontend/README.md`.
 
 ## Run locally
 
@@ -34,18 +34,17 @@ Backend:
 
 Frontend:
 
-- `NEXT_PUBLIC_BACKEND_URL` — backend origin used by the Next.js rewrite proxy (default `http://localhost:8000`).
-- `NEXT_PUBLIC_API_URL` — direct API base override in `src/lib/apiClient.ts`; defaults to `http://localhost:8000` (or the rewrite path when unset in production).
-- AI provider, model, base URL, and API key are chosen in the UI and passed per-request (`ai_provider`, `ai_model`, `ai_base_url`, `ai_api_key`) — there are no server-side AI env vars.
+- No environment variables are required for the hosted website. Same-origin Next.js routes handle its API requests.
+- Optional DeepSeek uses a user-supplied API key held in browser tab memory and forwarded per request; it is never stored with projects.
 
 ## PWA
 
-The frontend is an installable, offline-capable Progressive Web App. After the first visit the app shell is cached by a hand-rolled service worker (`frontend/public/sw.js`), so MineCAD AI can be installed on mobile or desktop and keeps working with no network connection — the local (rule-based) AI provider generates all geometry client-side. Only AI-provider API calls and backend exports require connectivity, and those requests are never cached.
+The frontend is an installable, offline-capable Progressive Web App. After the first visit the app shell is cached by a hand-rolled service worker (`frontend/public/sw.js`), so local rule-based generation and client-side exports can continue offline. DeepSeek requests require connectivity and are never cached.
 
 ## Deployment
 
-- **Frontend**: Vercel (repo root = `frontend/`); set `NEXT_PUBLIC_BACKEND_URL` to the Railway URL.
-- **Backend**: Railway (`backend/railway.toml`/`Procfile` — `uvicorn main:app --host 0.0.0.0 --port $PORT`); set `ALLOWED_ORIGINS` to the Vercel domain.
+- **Frontend**: Vercel (repo root = `frontend/`). Its Next.js API routes work without Railway.
+- **Optional standalone Python API**: Railway (`backend/railway.toml`/`Procfile` — `uvicorn main:app --host 0.0.0.0 --port $PORT`). It is separate from the hosted website.
 
 ## Tests
 

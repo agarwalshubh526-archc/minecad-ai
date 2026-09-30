@@ -1,26 +1,6 @@
 import type { NextConfig } from "next";
 
-const backendOrigin = (() => {
-  try {
-    return new URL(process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000").origin;
-  } catch {
-    return "http://localhost:8000";
-  }
-})();
-
 const nextConfig: NextConfig = {
-  // Rewrites: proxy /api/* to backend (Railway) during production
-  // NEXT_PUBLIC_BACKEND_URL should be set in Vercel env vars
-  async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
-  },
-
   // Security headers
   async headers() {
     // React needs eval() for debugging features in development only;
@@ -45,7 +25,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              `connect-src 'self' ${backendOrigin} https://api.deepseek.com https://api-inference.huggingface.co http://localhost:* ws://localhost:* wss:`,
+              "connect-src 'self'",
               "frame-ancestors 'none'",
             ].join("; "),
           },

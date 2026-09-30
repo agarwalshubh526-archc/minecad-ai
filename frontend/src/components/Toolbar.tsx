@@ -53,6 +53,10 @@ interface ToolbarProps {
   isGenerating: boolean;
   sheetMode?: boolean;
   setSheetMode?: (v: boolean) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export default function Toolbar({
@@ -64,8 +68,14 @@ export default function Toolbar({
   aiConfig, setAiConfig,
   isGenerating,
   sheetMode = false, setSheetMode,
+  onUndo, onRedo, canUndo, canRedo,
 }: ToolbarProps) {
   const [showAiSettings, setShowAiSettings] = React.useState(false);
+  React.useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setShowAiSettings(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, []);
 
   return (
     <div className="h-12 bg-surface-raised/90 backdrop-blur border-b border-edge flex items-center px-3 gap-1.5 select-none relative z-50 overflow-x-auto">
@@ -157,6 +167,11 @@ export default function Toolbar({
         </div>
       )}
 
+      <div className="flex gap-1 shrink-0" aria-label="Edit history">
+        <button type="button" className="btn h-8 px-2 text-[11px]" onClick={onUndo} disabled={!canUndo} title="Undo last design edit" aria-label="Undo last design edit">Undo</button>
+        <button type="button" className="btn h-8 px-2 text-[11px]" onClick={onRedo} disabled={!canRedo} title="Redo design edit" aria-label="Redo design edit">Redo</button>
+      </div>
+
       <div className="flex-1" />
 
       {/* Status */}
@@ -224,96 +239,41 @@ export default function Toolbar({
         <div className="absolute top-full right-3 mt-1.5 w-[calc(100vw-1.5rem)] max-w-80 card shadow-[var(--shadow-pop)] p-4 z-[100] animate-fade-in">
           <h3 className="text-xs font-bold text-fg mb-3 tracking-tight">AI Configuration</h3>
 
-          <label className="block eyebrow mb-1.5">Provider</label>
+          <label htmlFor="ai-provider" className="block eyebrow mb-1.5">Provider</label>
           <select
+            id="ai-provider"
             value={aiConfig.provider}
-            onChange={e => setAiConfig({ ...aiConfig, provider: e.target.value as AIConfig['provider'] })}
+            onChange={e => setAiConfig({ ...aiConfig, provider: e.target.value as AIConfig['provider'], model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com' })}
             className="input w-full text-xs px-2.5 py-2 mb-4"
           >
             <option value="local">Local (Rule-Based NLP)</option>
             <option value="deepseek">DeepSeek AI (Official API)</option>
-            <option value="ollama">Ollama (Local LLM)</option>
-            <option value="huggingface">HuggingFace (Free API)</option>
           </select>
 
           {aiConfig.provider === 'deepseek' && (
             <>
-              <label className="block eyebrow mb-1.5">Model</label>
+              <label htmlFor="ai-model" className="block eyebrow mb-1.5">Model</label>
               <select
+                id="ai-model"
                 value={aiConfig.model || 'deepseek-chat'}
                 onChange={e => setAiConfig({ ...aiConfig, model: e.target.value })}
                 className="input w-full text-xs px-2.5 py-2 mb-4"
               >
                 <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                <option value="deepseek-coder">DeepSeek Coder</option>
                 <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
               </select>
-              <label className="block eyebrow mb-1.5">DeepSeek API Key</label>
+              <label htmlFor="ai-key" className="block eyebrow mb-1.5">DeepSeek API Key</label>
               <input
+                id="ai-key"
                 type="password"
                 value={aiConfig.apiKey}
                 onChange={e => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
                 className="input w-full text-xs px-2.5 py-2 mb-4 font-mono"
                 placeholder="sk-..."
               />
-              <label className="block eyebrow mb-1.5">API Base URL</label>
-              <input
-                value={aiConfig.baseUrl || 'https://api.deepseek.com'}
-                onChange={e => setAiConfig({ ...aiConfig, baseUrl: e.target.value })}
-                className="input w-full text-[11px] px-2.5 py-2 mb-2 font-mono"
-                placeholder="https://api.deepseek.com"
-              />
               <p className="text-[10px] text-success mt-1 leading-relaxed">
-                Integrated into CLI terminal. High accuracy mining CAD code generation & engineering math.
+                Your key stays in this tab and is sent through this site to DeepSeek for each request.
               </p>
-            </>
-          )}
-
-          {aiConfig.provider === 'ollama' && (
-            <>
-              <label className="block eyebrow mb-1.5">Model</label>
-              <select
-                value={aiConfig.model}
-                onChange={e => setAiConfig({ ...aiConfig, model: e.target.value })}
-                className="input w-full text-xs px-2.5 py-2 mb-4"
-              >
-                <option value="llama3.1">Llama 3.1</option>
-                <option value="deepseek-coder-v2">DeepSeek Coder V2</option>
-                <option value="qwen2.5">Qwen 2.5</option>
-                <option value="mistral">Mistral</option>
-                <option value="gemma2">Gemma 2</option>
-              </select>
-              <label className="block eyebrow mb-1.5">Ollama URL</label>
-              <input
-                value={aiConfig.baseUrl}
-                onChange={e => setAiConfig({ ...aiConfig, baseUrl: e.target.value })}
-                className="input w-full text-xs px-2.5 py-2 mb-4 font-mono"
-                placeholder="http://localhost:11434"
-              />
-            </>
-          )}
-
-          {aiConfig.provider === 'huggingface' && (
-            <>
-              <label className="block eyebrow mb-1.5">Model</label>
-              <select
-                value={aiConfig.model}
-                onChange={e => setAiConfig({ ...aiConfig, model: e.target.value })}
-                className="input w-full text-xs px-2.5 py-2 mb-4"
-              >
-                <option value="Qwen/Qwen2.5-Coder-32B-Instruct">Qwen 2.5 Coder 32B</option>
-                <option value="meta-llama/Llama-3.1-70B-Instruct">Llama 3.1 70B</option>
-                <option value="mistralai/Mixtral-8x7B-Instruct-v0.1">Mixtral 8x7B</option>
-                <option value="google/gemma-2-27b-it">Gemma 2 27B</option>
-              </select>
-              <label className="block eyebrow mb-1.5">API Key (optional for free tier)</label>
-              <input
-                type="password"
-                value={aiConfig.apiKey}
-                onChange={e => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
-                className="input w-full text-xs px-2.5 py-2 font-mono"
-                placeholder="hf_..."
-              />
             </>
           )}
 

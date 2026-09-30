@@ -72,6 +72,23 @@ interface RightSidebarProps {
 
 type Tab = 'properties' | 'layers' | 'explain';
 
+const EDITABLE_PROPERTIES = new Set([
+  'bench_height', 'bench_width', 'num_benches', 'pit_length', 'pit_width',
+  'haul_road_width', 'overall_slope', 'batter_angle', 'room_width',
+  'pillar_width', 'num_rooms_x', 'num_rooms_y', 'room_height', 'entry_width',
+  'num_airways', 'airway_length', 'shaft_diameter', 'fan_power_kw',
+  'length', 'width', 'inclination', 'start_x', 'start_y', 'end_x', 'end_y',
+  'burden', 'spacing', 'num_rows', 'num_holes_per_row', 'hole_diameter',
+  'hole_depth', 'pattern', 'height', 'gradient', 'total_length',
+  'num_levels', 'level_spacing', 'num_stations', 'starting_easting',
+  'starting_northing', 'starting_elevation', 'avg_segment_len',
+  'contour_interval', 'min_elevation', 'max_elevation', 'grid_size_x',
+  'grid_size_y', 'num_boreholes', 'total_depth', 'coal_seam_thickness',
+  'coal_seam_depth', 'dip_angle_deg', 'face_width', 'panel_length',
+  'seam_height', 'num_supports', 'shearer_position', 'pit_depth',
+  'surface_width', 'bottom_width', 'original_ground_slope', 'rock_density',
+]);
+
 export default function RightSidebar({
   geometry,
   layers,
@@ -82,6 +99,7 @@ export default function RightSidebar({
 }: RightSidebarProps) {
   const properties = geometry?.properties || {};
   const [activeTab, setActiveTab] = useState<Tab>('properties');
+  const idPrefix = React.useId();
   // Mobile: tap ⓘ toggles an inline accordion per property
   const [openInfoKey, setOpenInfoKey] = useState<string | null>(null);
 
@@ -91,45 +109,18 @@ export default function RightSidebar({
     );
   };
 
-  const toggleLayerLock = (name: string) => {
-    setLayers(
-      layers.map((l) => (l.name === name ? { ...l, locked: !l.locked } : l))
-    );
-  };
-
   const handleParamChange = (key: string, value: number | string) => {
     const updated = { ...properties, [key]: value };
+    if (key === 'length' && properties._object_type === 'conveyor' && typeof value === 'number') {
+      const sx = Number(properties.start_x || 0), sy = Number(properties.start_y || 0);
+      const ex = Number(properties.end_x || 200), ey = Number(properties.end_y || 0);
+      const oldLength = Math.hypot(ex - sx, ey - sy) || 1;
+      updated.end_x = sx + (ex - sx) * value / oldLength;
+      updated.end_y = sy + (ey - sy) * value / oldLength;
+    }
     // Clear internal helper variables starting with underscore
     delete updated._object_type;
     onUpdateParams(updated);
-  };
-
-  const computeSlopeSafetyFactor = () => {
-    if (!properties || !properties.overall_slope) return null;
-    const slopeDeg = Number(properties.overall_slope || 55);
-    const benchH = Number(properties.bench_height || 10);
-    const numBenches = Number(properties.num_benches || 5);
-    const totalH = benchH * numBenches;
-
-    const rad = (slopeDeg * Math.PI) / 180;
-    const cohesion = 35; // kPa
-    const gamma = 25; // kN/m3
-    const phiRad = (32 * Math.PI) / 180;
-
-    const numerator = cohesion + gamma * totalH * Math.cos(rad) ** 2 * Math.tan(phiRad);
-    const denominator = gamma * totalH * Math.sin(rad) * Math.cos(rad) + 0.001;
-    const fos = Math.max(0.5, Math.min(3.5, numerator / denominator));
-
-    let status = 'STABLE';
-    let badgeBg = 'bg-success/10 text-success border-success/40';
-    if (fos < 1.1) {
-      status = 'UNSTABLE / CRITICAL SLIP';
-      badgeBg = 'bg-danger/10 text-danger border-danger/40';
-    } else if (fos < 1.5) {
-      status = 'MARGINAL / MONITORING REQUIRED';
-      badgeBg = 'bg-warn/10 text-warn border-warn/40';
-    }
-    return { fos: fos.toFixed(2), status, badgeBg, totalH, slopeDeg };
   };
 
   if (collapsed) {
@@ -178,13 +169,14 @@ export default function RightSidebar({
             .replace(/_/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
           const isNum = typeof val === 'number';
+          const editable = EDITABLE_PROPERTIES.has(key) && !properties.data_source;
           const glossary = getGlossaryEntry(key);
           const infoOpen = openInfoKey === key;
 
           return (
             <div key={key} className="flex flex-col gap-1">
               <div className="flex items-center gap-1 relative group/prop">
-                <label className="text-[10px] uppercase tracking-[0.12em] text-fg-muted font-semibold">
+                <label htmlFor={`${idPrefix}-${key}`} className="text-[11px] uppercase tracking-[0.12em] text-fg-muted font-semibold">
                   {label}
                 </label>
                 {glossary && (
@@ -194,13 +186,14 @@ export default function RightSidebar({
                     className="text-fg-faint hover:text-info transition-colors p-0.5 leading-none"
                     title={glossary.term}
                     aria-label={`What is ${glossary.term}?`}
+                    aria-expanded={infoOpen}
                   >
                     <Icon d={I.info} className="w-3 h-3" />
                   </button>
                 )}
                 {/* Desktop hover tooltip (drops below the info button) */}
                 {glossary && (
-                  <div className="hidden md:block invisible opacity-0 group-hover/prop:visible group-hover/prop:opacity-100 transition-opacity absolute top-full left-0 mt-1 z-30 w-60 max-w-[240px] bg-surface-overlay border border-edge rounded-lg p-2.5 shadow-[var(--shadow-pop)] pointer-events-none">
+                  <div className="hidden md:block invisible opacity-0 group-hover/prop:visible group-hover/prop:opacity-100 group-focus-within/prop:visible group-focus-within/prop:opacity-100 transition-opacity absolute top-full left-0 mt-1 z-30 w-60 max-w-[240px] bg-surface-overlay border border-edge rounded-lg p-2.5 shadow-[var(--shadow-pop)] pointer-events-none">
                     <div className="text-[10px] font-bold text-info font-mono mb-1">
                       {glossary.term}
                     </div>
@@ -227,17 +220,19 @@ export default function RightSidebar({
                   </div>
                 </div>
               )}
-              {isNum ? (
+              {!editable ? (
+                <output id={`${idPrefix}-${key}`} className="text-xs text-fg-muted tabular-nums break-words">{String(val)}</output>
+              ) : isNum ? (
                 <input
+                  id={`${idPrefix}-${key}`}
                   type="number"
                   value={val as number}
-                  onChange={(e) =>
-                    handleParamChange(key, parseFloat(e.target.value) || 0)
-                  }
+                  onChange={(e) => { if (e.target.value !== '' && Number.isFinite(Number(e.target.value))) handleParamChange(key, Number(e.target.value)); }}
                   className="input font-mono text-base md:text-xs tabular-nums"
                 />
               ) : (
                 <input
+                  id={`${idPrefix}-${key}`}
                   type="text"
                   value={val as string}
                   onChange={(e) => handleParamChange(key, e.target.value)}
@@ -258,25 +253,18 @@ export default function RightSidebar({
       </div>
       {renderPropertyInputs()}
 
-      {/* Slope Stability Factor of Safety (FoS) Geotechnical Analysis */}
-      {Boolean(properties.overall_slope) && (() => {
-        const slopeInfo = computeSlopeSafetyFactor();
-        if (!slopeInfo) return null;
-        return (
-          <div className="border-t border-edge p-3 bg-surface-overlay/50 font-mono">
-            <div className="text-[10px] text-info font-bold mb-1 flex items-center gap-1.5">
-              <Icon d={I.mountain} className="w-3.5 h-3.5" />
-              <span>Slope Stability Analysis (FoS)</span>
-            </div>
-            <div className="text-[9px] text-fg-faint mb-2">
-              Overall Slope: {slopeInfo.slopeDeg}° | Total Height: {slopeInfo.totalH}m
-            </div>
-            <div className={`p-2 rounded-lg border font-mono text-center text-xs font-bold ${slopeInfo.badgeBg}`}>
-              FoS = {slopeInfo.fos} ({slopeInfo.status})
-            </div>
+      {Boolean(properties.overall_slope) && (
+        <div className="border-t border-edge p-3 bg-surface-overlay/50 font-mono" role="note">
+          <div className="text-xs text-warn font-bold mb-1 flex items-center gap-1.5">
+            <Icon d={I.mountain} className="w-3.5 h-3.5" />
+            <span>Slope stability is not assessed</span>
           </div>
-        );
-      })()}
+          <p className="text-[11px] text-fg-muted leading-relaxed">
+            This is a conceptual pit shape. A factor of safety requires site geology, rock strength,
+            groundwater and a reviewed analysis method. Do not use this drawing as a stability result.
+          </p>
+        </div>
+      )}
 
       {/* Render Survey Control Station Table if available */}
       {Array.isArray(properties.survey_stations) && (
@@ -339,13 +327,6 @@ export default function RightSidebar({
                   title={layer.visible ? 'Hide layer' : 'Show layer'}
                 >
                   <Icon d={layer.visible ? I.eye : I.eyeOff} className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => toggleLayerLock(layer.name)}
-                  className={`p-1 rounded transition-colors ${layer.locked ? 'text-danger hover:text-fg' : 'text-fg-faint hover:text-fg'}`}
-                  title={layer.locked ? 'Unlock layer' : 'Lock layer'}
-                >
-                  <Icon d={layer.locked ? I.lock : I.unlock} className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>

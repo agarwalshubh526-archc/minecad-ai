@@ -66,7 +66,7 @@ export default function TermsPage() {
                 'AI-driven natural language to 2D/3D CAD geometry generation',
                 'Mine surveying traverse computation and topographic contour mapping',
                 'Blast pattern design, ventilation network layout, and decline access planning',
-                'Geotechnical slope stability analysis (Factor of Safety calculations)',
+                'Conceptual pit geometry with a clear notice that slope stability is not assessed',
                 'Engineering drawing export in DXF, SVG, PDF, OBJ, and STL formats',
                 'DeepSeek AI terminal integration for mining engineering queries',
               ].map((item, i) => (
@@ -86,7 +86,7 @@ export default function TermsPage() {
               <p className="text-[#f97316] font-semibold text-xs font-mono mb-2">⚠ CRITICAL SAFETY NOTICE</p>
               <p>
                 MineCAD AI generates <strong className="text-white">preliminary conceptual designs only</strong>.
-                All outputs — including slope stability calculations, blast patterns, ventilation designs, and
+                All outputs — including pit geometry, blast patterns, ventilation designs, and
                 survey traverses — must be reviewed, verified, and validated by a <strong className="text-white">licensed
                 and qualified mining engineer or geotechnical engineer</strong> before use in any real-world
                 mining operation.
@@ -99,7 +99,7 @@ export default function TermsPage() {
             <ul className="list-none space-y-2 pl-4">
               {[
                 'AI-generated designs are conceptual aids, not certified engineering documents.',
-                'Factor of Safety (FoS) values are approximate and must be independently verified.',
+                'The Service does not calculate a site-specific factor of safety.',
                 'Blast patterns require approval from licensed explosives engineers and regulatory bodies.',
                 'All survey data must be independently checked against control points.',
                 'Geotechnical recommendations must comply with local mining safety regulations.',
@@ -155,9 +155,8 @@ export default function TermsPage() {
               <span className="text-[#f97316] font-mono">06.</span> Third-Party AI Services
             </h2>
             <p>
-              MineCAD AI optionally integrates with third-party AI providers including <strong className="text-white">DeepSeek AI</strong>,
-              local Ollama models, and Hugging Face inference endpoints. When using these integrations, your prompts
-              may be transmitted to third-party servers. We are not responsible for the policies, data handling,
+              MineCAD AI optionally integrates with <strong className="text-white">DeepSeek AI</strong>.
+              When selected, your prompt and API key pass through this site to DeepSeek. We are not responsible for the policies, data handling,
               or availability of these third-party services. You must comply with their respective Terms of Service:
             </p>
             <ul className="mt-3 list-none space-y-1 pl-4">
@@ -165,11 +164,6 @@ export default function TermsPage() {
                 <span className="text-info">→</span>
                 <a href="https://www.deepseek.com/terms" target="_blank" rel="noopener noreferrer"
                    className="text-info hover:underline">DeepSeek Terms of Service</a>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-info">→</span>
-                <a href="https://huggingface.co/terms-of-service" target="_blank" rel="noopener noreferrer"
-                   className="text-info hover:underline">Hugging Face Terms of Service</a>
               </li>
             </ul>
           </section>

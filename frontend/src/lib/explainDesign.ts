@@ -69,7 +69,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
             `The ${hrw} m wide haul road winds down the side so trucks can drive in and out.`,
             glossaryLine('haul_road_width') ?? '',
             glossaryLine('overall_slope') ?? '',
-            `Your overall slope is ${slope}°. Mine engineers check this angle against rock strength to keep the wall from collapsing (see the FoS badge in Properties).`,
+            `Your overall slope is ${slope}°. This drawing does not assess slope stability; use site-specific geotechnical data and professional review.`,
           ],
         },
         {

@@ -572,7 +572,7 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
   const numAirways = params.num_airways ?? 6;
   const airwayLen = params.airway_length ?? 100;
   const shaftD = params.shaft_diameter ?? 6;
-  const fanPower = params.fan_power ?? 200;
+  const fanPower = params.fan_power_kw ?? params.fan_power ?? 200;
 
   const prims: CadPrimitive[] = [];
   const meshes: MeshData[] = [];
@@ -718,6 +718,7 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
     primitives: prims, meshes, layers,
     properties: {
       name: 'Conveyor Route', length: actualLen, width, inclination,
+      start_x: startX, start_y: startY, end_x: endX, end_y: endY,
       start: [startX, startY], end: [endX, endY],
       vertical_lift_m: Math.round(rise * 100) / 100,
       _object_type: 'conveyor',
@@ -969,6 +970,7 @@ export function generateMineSurveyTraverse(params: Record<string, unknown>): Geo
       starting_easting: startE,
       starting_northing: startN,
       starting_elevation: startZ,
+      avg_segment_len: avgDist,
       total_perimeter: Number(totalLen.toFixed(2)),
       misclosure_easting: closureE,
       misclosure_northing: closureN,
@@ -1085,10 +1087,10 @@ export function generateTopographicContours(params: Record<string, unknown>): Ge
 export function generateBoreholeLithology(params: Record<string, unknown>): GeometryData {
   const numHoles = Number(params.num_boreholes || 5);
   const spacing = Number(params.spacing || 50);
-  const totalDepth = Number(params.depth || 80);
+  const totalDepth = Number(params.total_depth ?? params.depth ?? 80);
   const seamThick = Number(params.coal_seam_thickness || 4.5);
   const seamDepth = Number(params.coal_seam_depth || 35);
-  const dipAngle = Number(params.dip_angle || 8);
+  const dipAngle = Number(params.dip_angle_deg ?? params.dip_angle ?? 8);
 
   const prims: CadPrimitive[] = [];
   const meshes: MeshData[] = [];
@@ -1325,6 +1327,8 @@ export function generateCutFillVolume(params: Record<string, unknown>): Geometry
       pit_depth: pitD,
       surface_width: surfW,
       bottom_width: botW,
+      original_ground_slope: slopeDeg,
+      rock_density: density,
       cut_area_m2: Number(cutAreaM2.toFixed(2)),
       cut_volume_m3: Number(cutVolM3.toFixed(2)),
       cut_tonnes: Number(cutTonnes.toFixed(2)),
@@ -1366,7 +1370,21 @@ const ANGLE_PARAMS = new Set([
   'dip_angle', 'original_ground_slope',
 ]);
 
-const MAX_COUNT = 500;
+const COUNT_LIMITS: Record<string, number> = {
+  num_rooms_x: 15, num_rooms_y: 15, num_rows: 30,
+  num_holes_per_row: 40, num_benches: 40, num_levels: 30,
+  num_supports: 200, num_airways: 60, num_boreholes: 60,
+  num_stations: 80,
+};
+const POSITIVE_DIMENSIONS = new Set([
+  'bench_height', 'bench_width', 'pit_length', 'pit_width', 'haul_road_width',
+  'room_width', 'pillar_width', 'room_height', 'entry_width', 'airway_length',
+  'shaft_diameter', 'length', 'width', 'burden', 'spacing', 'hole_diameter',
+  'hole_depth', 'height', 'total_length', 'level_spacing', 'avg_segment_len',
+  'grid_size_x', 'grid_size_y', 'depth', 'coal_seam_thickness',
+  'coal_seam_depth', 'face_width', 'panel_length', 'seam_height',
+  'pit_depth', 'surface_width', 'bottom_width', 'rock_density',
+]);
 
 function sanitizeParams(params: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
@@ -1385,9 +1403,11 @@ function sanitizeParams(params: Record<string, unknown>): Record<string, unknown
     }
     if (!Number.isFinite(num)) continue; // NaN / Infinity → generator default
     if (INTEGER_COUNT_PARAMS.has(key)) {
-      num = Math.min(MAX_COUNT, Math.max(1, Math.round(num)));
+      num = Math.min(COUNT_LIMITS[key] || 80, Math.max(1, Math.round(num)));
     } else if (ANGLE_PARAMS.has(key)) {
       num = Math.min(89, Math.max(0, num));
+    } else if (POSITIVE_DIMENSIONS.has(key)) {
+      num = Math.min(100000, Math.max(0.1, num));
     }
     clean[key] = num;
   }
@@ -1457,4 +1477,3 @@ Return ONLY valid JSON with fields:
   }
   return null;
 }
-

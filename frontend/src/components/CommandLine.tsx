@@ -27,7 +27,7 @@ export default function CommandLine({ history, onCommandSubmit, activeProvider =
   }, [history]);
 
   return (
-    <div className="h-32 bg-surface-sunken border-t border-edge flex flex-col overflow-hidden">
+    <div className="h-24 md:h-32 shrink-0 bg-surface-sunken border-t border-edge flex flex-col overflow-hidden">
       {/* Window chrome: traffic-light dots + title + provider badge */}
       <div className="flex items-center gap-2 px-3 h-7 border-b border-edge shrink-0 select-none">
         <div className="flex gap-1.5" aria-hidden>

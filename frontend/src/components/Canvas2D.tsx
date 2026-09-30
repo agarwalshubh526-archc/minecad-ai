@@ -687,6 +687,23 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       <canvas
         ref={canvasRef}
         className="w-full h-full block cursor-crosshair touch-none"
+        tabIndex={0}
+        role="application"
+        aria-label="2D mine drawing. Use arrow keys to move the inspection cursor, Space to add a measurement point, and Escape to clear points."
+        onKeyDown={e => {
+          const step = 10 / Math.max(transform.scale, 0.1);
+          const next = { ...cursorWorldRef.current };
+          if (e.key === 'ArrowLeft') next.x -= step;
+          else if (e.key === 'ArrowRight') next.x += step;
+          else if (e.key === 'ArrowUp') next.y += step;
+          else if (e.key === 'ArrowDown') next.y -= step;
+          else if (e.key === ' ' && activeTool !== 'pan') { e.preventDefault(); addMeasurePoint(); return; }
+          else if (e.key === 'Escape') { setMeasurePoints([]); return; }
+          else return;
+          e.preventDefault();
+          cursorWorldRef.current = next;
+          setCursorWorld(next);
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -696,6 +713,13 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
       />
+
+      <div className="sr-only" aria-live="polite">
+        {activeTool === 'distance' && measurePoints.length === 2 &&
+          `Measured distance ${Math.hypot(measurePoints[1].x - measurePoints[0].x, measurePoints[1].y - measurePoints[0].y).toFixed(2)} metres.`}
+        {activeTool === 'coordinate' && measurePoints.length > 0 &&
+          `Selected coordinate easting ${measurePoints.at(-1)!.x.toFixed(2)}, northing ${measurePoints.at(-1)!.y.toFixed(2)} metres.`}
+      </div>
 
       {/* Coordinate bar */}
       <div className="absolute bottom-0 left-0 right-0 min-h-6 bg-surface-raised/90 backdrop-blur border-t border-edge flex flex-wrap items-center px-3 py-0.5 text-[9px] md:text-[10px] text-fg-muted font-mono gap-x-4 gap-y-0.5 z-30">

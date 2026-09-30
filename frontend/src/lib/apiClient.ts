@@ -77,6 +77,7 @@ export async function chatWithDeepSeek(
     const res = await fetch(`${API_BASE}/api/deepseek/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         prompt,
         model,

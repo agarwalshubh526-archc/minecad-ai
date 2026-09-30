@@ -47,8 +47,8 @@ export default function CookiesPage() {
             <p>
               Cookies are small text files placed on your device when you visit a website. They are widely
               used to make websites work efficiently and to provide analytical information to site owners.
-              In addition to traditional cookies, we also use browser <strong className="text-white">Local Storage</strong> and
-              <strong className="text-white"> Session Storage</strong> for application state management.
+              The app uses browser <strong className="text-white">IndexedDB</strong> for project files and
+              <strong className="text-white"> Local Storage</strong> to remember whether onboarding was completed.
             </p>
           </section>
 
@@ -76,11 +76,8 @@ export default function CookiesPage() {
                 </thead>
                 <tbody className="divide-y divide-edge">
                   {[
-                    ['minecad_ai_config', 'Local Storage', 'Stores your AI provider preference (local/deepseek/ollama) and model selection', 'Until manually cleared'],
-                    ['minecad_view_mode', 'Local Storage', 'Remembers 2D/3D view preference', 'Until manually cleared'],
-                    ['minecad_sidebar_state', 'Session Storage', 'Sidebar collapse/expand state during your session', 'Session end'],
-                    ['minecad_cmd_history', 'Session Storage', 'Terminal command history during active session', 'Session end'],
-                    ['minecad_projects', 'Local Storage', 'Your current working project files and geometry data', 'Until manually cleared'],
+                    ['minecad-workspace', 'IndexedDB', 'Stores your projects and selected project on this device', 'Until you clear browser site data'],
+                    ['minecad-onboarded', 'Local Storage', 'Remembers whether you completed the introductory tour', 'Until you clear browser site data'],
                   ].map(([name, type, purpose, expires]) => (
                     <tr key={name}>
                       <td className="px-4 py-3 font-mono text-xs text-[#f97316]">{name}</td>
@@ -119,14 +116,12 @@ export default function CookiesPage() {
               <span className="text-[#3fb950] font-mono">03.</span> Third-Party Storage
             </h2>
             <p className="mb-3">
-              Certain third-party services integrated with MineCAD AI may set their own cookies
-              or storage when their APIs are invoked from your browser:
+              The app also loads framework assets and fonts. Optional DeepSeek requests are sent through this site:
             </p>
             <ul className="list-none space-y-2 pl-4">
               {[
-                'Next.js framework may set internal route-caching state in session storage.',
                 'Font loading from Google Fonts CDN may involve CDN-level caching headers (not tracking cookies).',
-                'If you directly configure a DeepSeek or Hugging Face API call from the browser, those requests are subject to their respective cookie policies.',
+                'DeepSeek receives a request only when you select it and submit a prompt or question.',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="text-fg-muted mt-0.5">→</span>
@@ -143,15 +138,13 @@ export default function CookiesPage() {
             <div className="bg-[#f97316]/5 border border-[#f97316]/25 rounded-lg p-4">
               <p className="text-[#f97316] font-semibold text-xs font-mono mb-2">⚠ Security Notice</p>
               <p>
-                If you choose to save your third-party AI API keys (DeepSeek, Hugging Face) in the
-                MineCAD AI settings, those keys are stored in your browser&apos;s <strong className="text-white">Local Storage</strong>.
-                This is standard practice for client-side applications, but carries inherent risk on
-                shared or public computers. We recommend:
+                A DeepSeek API key entered in settings remains in this browser tab&apos;s memory. It is not saved
+                with your projects. On a shared computer, close the tab when finished. We recommend:
               </p>
               <ul className="mt-3 list-none space-y-1">
                 {[
-                  'Do not save API keys on shared/public computers.',
-                  'Clear browser local storage after using MineCAD AI on untrusted devices.',
+                  'Avoid entering API keys on shared/public computers.',
+                  'Close the tab when finished on an untrusted device.',
                   'Use restricted API keys with usage limits from your AI provider\'s dashboard.',
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
@@ -185,7 +178,7 @@ export default function CookiesPage() {
                 },
                 {
                   browser: 'Developer Tools',
-                  steps: 'F12 → Application/Storage tab → Local Storage → Right-click → Clear'
+                  steps: 'F12 → Application/Storage tab → Clear site data (including IndexedDB)'
                 },
               ].map(({ browser, steps }) => (
                 <div key={browser} className="bg-surface-raised border border-edge rounded-lg p-3">
@@ -196,8 +189,8 @@ export default function CookiesPage() {
             </div>
 
             <p className="mt-4 text-fg-muted text-xs">
-              Note: Clearing storage will reset your AI provider settings, project files stored in the browser,
-              and view preferences. Exported files (DXF, PDF, SVG, etc.) saved to your computer are not affected.
+              Note: Clearing site data deletes locally saved projects and resets the onboarding tour.
+              Download project files before clearing it. Exported files already saved to your computer are not affected.
             </p>
           </section>
 

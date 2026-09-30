@@ -9,6 +9,7 @@ export interface ParsedPrompt {
   features: string[];
   notes: string[];
   interpretation: string;
+  recognized: boolean;
 }
 
 const FT_TO_M = 0.3048;
@@ -251,7 +252,8 @@ export function parsePromptLocal(prompt: string): ParsedPrompt {
   const notes: string[] = [];
 
   const [primary, secondary] = splitSecondary(text);
-  const objectType = detectType(primary) ?? detectType(text) ?? 'open_pit';
+  const detectedType = detectType(primary) ?? detectType(text);
+  const objectType = detectedType ?? 'open_pit';
 
   const params: Record<string, number> = {};
   for (const [re, key] of PARAM_PATTERNS) {
@@ -277,6 +279,7 @@ export function parsePromptLocal(prompt: string): ParsedPrompt {
     features,
     notes,
     interpretation: buildInterpretation(objectType, params, notes),
+    recognized: Boolean(detectedType || Object.keys(params).length),
   };
 }
 

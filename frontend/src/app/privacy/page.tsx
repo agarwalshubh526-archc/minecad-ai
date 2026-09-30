@@ -80,11 +80,9 @@ export default function PrivacyPage() {
                 <h3 className="text-white font-semibold mb-2 text-sm">2.2 Technical Information (Automatically Collected)</h3>
                 <ul className="list-none space-y-2">
                   {[
-                    'Browser type and version for compatibility purposes',
-                    'Operating system type (macOS, Windows, Linux)',
-                    'Referral URL and pages visited within the app',
-                    'IP address (used for rate limiting and security, not tracking)',
-                    'Session timing and feature usage frequency (anonymized)',
+                    'Your browser may send IP address, user agent, and request metadata to the hosting provider when loading the site.',
+                    'The app does not include a usage analytics tracker.',
+                    'Projects are saved locally in your browser, rather than in a MineCAD account.',
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <span className="text-info mt-0.5">▸</span>
@@ -123,9 +121,8 @@ export default function PrivacyPage() {
                 'Process your natural language prompts and generate CAD geometry outputs',
                 'Pass engineering parameters to geometry generators and exporters',
                 'Route API keys to your chosen third-party AI provider (keys never stored on our servers)',
-                'Monitor server health, error rates, and API response times',
-                'Improve parsing accuracy and geometry generation quality over time',
-                'Detect and prevent abuse, fraud, or unauthorized API access',
+                'Save projects in browser IndexedDB so they can be restored on this device',
+                'Return generated drawings and export files to your browser',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="text-info mt-0.5">▸</span>
@@ -144,10 +141,9 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-none space-y-2 pl-4">
               {[
-                'Prompts and generated geometry are processed in-memory and not persisted to disk after request completion.',
-                'API keys you enter are stored only in your browser\'s session memory and are never sent to our servers unencrypted.',
-                'Server access logs (IP, timestamp, endpoint) are retained for up to 30 days for security purposes, then automatically deleted.',
-                'Anonymized aggregate usage statistics (feature counts, not content) may be retained indefinitely.',
+                'Projects and generated geometry are saved in IndexedDB on your device until you clear browser site data.',
+                'Your optional DeepSeek API key remains in this browser tab and is sent over HTTPS to our API route, which forwards the request to DeepSeek. It is not saved with projects.',
+                'The hosting provider may process standard request logs. We do not claim a fixed retention period here.',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="text-info mt-0.5">▸</span>
@@ -162,8 +158,8 @@ export default function PrivacyPage() {
               <span className="text-info font-mono">05.</span> Third-Party AI Providers &amp; Data Transfer
             </h2>
             <p className="mb-3">
-              When you configure MineCAD AI to use a third-party AI provider, your prompts are transmitted
-              directly to that provider&apos;s API. This data transfer is governed by that provider&apos;s privacy
+              When you choose DeepSeek, your prompt and API key pass through this site&apos;s API route to DeepSeek.
+              That provider&apos;s handling of the request is governed by its privacy
               policy, not ours:
             </p>
             <div className="bg-surface-raised border border-edge rounded-lg overflow-hidden">
@@ -178,8 +174,6 @@ export default function PrivacyPage() {
                 <tbody className="divide-y divide-edge">
                   {[
                     ['DeepSeek AI', 'Your prompt text', 'https://www.deepseek.com/privacy'],
-                    ['Ollama (local)', 'Nothing – runs on your machine', 'N/A (local only)'],
-                    ['Hugging Face', 'Your prompt text', 'https://huggingface.co/privacy'],
                   ].map(([provider, data, link]) => (
                     <tr key={provider}>
                       <td className="px-4 py-3 text-white font-mono text-xs">{provider}</td>
@@ -209,9 +203,9 @@ export default function PrivacyPage() {
             <ul className="list-none space-y-2 pl-4 mt-3">
               {[
                 'All API communications are encrypted in transit using TLS 1.2+',
-                'API keys are transmitted over HTTPS and never logged',
-                'Backend server uses rate limiting and CORS restrictions',
-                'No plaintext credentials are stored anywhere in our system',
+                'API keys are not deliberately written to application logs or project files',
+                'Provider requests use a fixed destination rather than an arbitrary user-supplied server URL',
+                'The optional API key is held in this browser tab while it is open',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="text-[#3fb950] mt-0.5">✓</span>

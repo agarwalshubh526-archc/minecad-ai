@@ -7,6 +7,8 @@ interface PromptBoxProps {
   isGenerating: boolean;
   /** v2 parser confirmation — "Understood: open pit — 5 benches × 12 m …" */
   note?: { id: number; text: string } | null;
+  error?: string;
+  method?: string;
 }
 
 const EXAMPLES = [
@@ -35,7 +37,7 @@ const CheckIcon = (
   </svg>
 );
 
-export default function PromptBox({ onGenerate, isGenerating, note = null }: PromptBoxProps) {
+export default function PromptBox({ onGenerate, isGenerating, note = null, error = '', method = '' }: PromptBoxProps) {
   const [prompt, setPrompt] = React.useState('');
   const [dismissedId, setDismissedId] = React.useState<number | null>(null);
 
@@ -58,7 +60,9 @@ export default function PromptBox({ onGenerate, isGenerating, note = null }: Pro
   };
 
   return (
-    <div className="bg-surface-raised border-t border-edge p-3 md:p-4 flex flex-col gap-3">
+    <div className="shrink-0 bg-surface-raised border-t border-edge p-3 md:p-4 flex flex-col gap-3">
+      <div className="text-[11px] text-fg-muted" role="status">Current design source: {method}. Conceptual output; review before use.</div>
+      {error && <div role="alert" className="text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</div>}
       {/* Parser interpretation confirmation (v2) — sleek inline pill */}
       {visibleNote && (
         <div
@@ -120,7 +124,8 @@ export default function PromptBox({ onGenerate, isGenerating, note = null }: Pro
               }
             }}
             placeholder='Describe your mine in plain words — e.g. "open pit with 5 benches 10m high", "room and pillar coal mine"...'
-            className="input w-full px-3 py-2 text-base md:text-xs font-mono h-14 resize-none leading-relaxed"
+            aria-label="Describe a conceptual mining design"
+            className="input w-full px-3 py-2 text-base md:text-sm font-mono h-14 resize-none leading-relaxed"
           />
         </div>
         <button

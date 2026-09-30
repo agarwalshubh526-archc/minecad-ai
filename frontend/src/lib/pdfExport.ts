@@ -4,7 +4,10 @@
 import type { GeometryData } from '@/types';
 
 function pdfEscapeText(text: string): string {
-  return String(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  return String(text)
+    .replaceAll('≈', '~').replaceAll('×', 'x').replaceAll('—', '-')
+    .replaceAll('–', '-').replaceAll('→', '->')
+    .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
 function toLatin1(s: string): Uint8Array {
@@ -91,6 +94,23 @@ export function exportPDF(geometry: GeometryData): Blob {
         `BT /F1 ${fontSize.toFixed(2)} Tf 1 0 0 1 ${tx(midX).toFixed(2)} ${(ty(midY) + 2 * scale).toFixed(2)} Tm ` +
         `(${pdfEscapeText(prim.text)}) Tj ET`
       );
+    } else if (prim.type === 'arc') {
+      const span = ((prim.endAngle - prim.startAngle) % 360 + 360) % 360 || 360;
+      const count = Math.max(8, Math.ceil(span / 10));
+      for (let i = 0; i <= count; i++) {
+        const angle = (prim.startAngle + span * i / count) * Math.PI / 180;
+        const x = tx(prim.cx + prim.r * Math.cos(angle)).toFixed(2);
+        const y = ty(prim.cy + prim.r * Math.sin(angle)).toFixed(2);
+        parts.push(`${x} ${y} ${i === 0 ? 'm' : 'l'}`);
+      }
+      parts.push('S');
+    } else if (prim.type === 'hatch' && prim.points.length >= 3) {
+      parts.push('0.35 0.35 0.45 rg');
+      for (let i = 0; i < prim.points.length; i++) {
+        const p = prim.points[i];
+        parts.push(`${tx(p.x).toFixed(2)} ${ty(p.y).toFixed(2)} ${i === 0 ? 'm' : 'l'}`);
+      }
+      parts.push('h B', '1 1 1 rg');
     }
   }
 
