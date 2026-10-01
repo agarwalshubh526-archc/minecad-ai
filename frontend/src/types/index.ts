@@ -67,7 +67,7 @@ export interface CadHatch {
   color: number;
 }
 
-export type CadPrimitive = CadLine | CadPolyline | CadCircle | CadArc | CadDimension | CadText | CadHatch;
+export type CadPrimitive = (CadLine | CadPolyline | CadCircle | CadArc | CadDimension | CadText | CadHatch) & { objectId?: string };
 
 // ─── 3D Meshes ───────────────────────────────────────────────────────────────
 
@@ -80,6 +80,7 @@ export interface MeshData {
   /** Optional CAD layer name — the 3D viewport uses it for rendering
    *  semantics (e.g. 'ROOF' renders translucent). Exporters ignore it. */
   layer?: string;
+  objectId?: string;
 }
 
 // ─── Layers ──────────────────────────────────────────────────────────────────
@@ -133,6 +134,17 @@ export interface ProjectFile {
   created_at: string;
   geometry: GeometryData | null;
   properties: Record<string, unknown>;
+  /** Editable components in one mine layout. Older projects omit this field. */
+  scene?: SceneObject[];
+}
+
+export interface SceneObject {
+  id: string;
+  name: string;
+  object_type: string;
+  params: Record<string, unknown>;
+  origin: Point2D;
+  geometry: GeometryData;
 }
 
 export interface AIConfig {

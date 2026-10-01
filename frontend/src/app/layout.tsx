@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MineCAD AI — AI-Powered CAD Generator for Mining Engineering",
-  description: "Explore conceptual 2D and 3D mining layouts with natural language prompts and CAD exports.",
+  title: "MineCAD AI — Prompt-led Mine Layout Editor",
+  description: "Build and edit conceptual 2D and 3D mine layouts from prompts, then export CAD drawings.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

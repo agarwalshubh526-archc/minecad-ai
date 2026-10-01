@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GeometryData, LayerInfo } from '@/types';
+import type { GeometryData, LayerInfo, SceneObject } from '@/types';
 import { dxfColor } from '@/types';
 import { getGlossaryEntry } from '@/lib/glossary';
 import ExplainPanel from '@/components/ExplainPanel';
@@ -63,6 +63,11 @@ function Icon({ d, className = 'w-3.5 h-3.5' }: { d: React.ReactNode; className?
 
 interface RightSidebarProps {
   geometry: GeometryData | null;
+  scene?: SceneObject[];
+  selectedObjectId?: string | null;
+  onSelectSceneObject?: (id: string) => void;
+  onMoveSceneObject?: (id: string, x: number, y: number) => void;
+  onDeleteSceneObject?: (id: string) => void;
   layers: LayerInfo[];
   setLayers: (l: LayerInfo[]) => void;
   onUpdateParams: (params: Record<string, unknown>) => void;
@@ -91,6 +96,11 @@ const EDITABLE_PROPERTIES = new Set([
 
 export default function RightSidebar({
   geometry,
+  scene = [],
+  selectedObjectId = null,
+  onSelectSceneObject,
+  onMoveSceneObject,
+  onDeleteSceneObject,
   layers,
   setLayers,
   onUpdateParams,
@@ -98,6 +108,7 @@ export default function RightSidebar({
   setCollapsed,
 }: RightSidebarProps) {
   const properties = geometry?.properties || {};
+  const selectedSceneObject = scene.find(item => item.id === selectedObjectId) ?? scene[0];
   const [activeTab, setActiveTab] = useState<Tab>('properties');
   const idPrefix = React.useId();
   // Mobile: tap ⓘ toggles an inline accordion per property
@@ -111,6 +122,8 @@ export default function RightSidebar({
 
   const handleParamChange = (key: string, value: number | string) => {
     const updated = { ...properties, [key]: value };
+    if (key === 'overall_slope') updated._design_driver = 'overall_slope';
+    if (key === 'bench_width') updated._design_driver = 'bench_width';
     if (key === 'length' && properties._object_type === 'conveyor' && typeof value === 'number') {
       const sx = Number(properties.start_x || 0), sy = Number(properties.start_y || 0);
       const ex = Number(properties.end_x || 200), ey = Number(properties.end_y || 0);
@@ -118,7 +131,6 @@ export default function RightSidebar({
       updated.end_x = sx + (ex - sx) * value / oldLength;
       updated.end_y = sy + (ey - sy) * value / oldLength;
     }
-    // Clear internal helper variables starting with underscore
     delete updated._object_type;
     onUpdateParams(updated);
   };
@@ -253,6 +265,12 @@ export default function RightSidebar({
       </div>
       {renderPropertyInputs()}
 
+      {Array.isArray(properties.design_warnings) && properties.design_warnings.length > 0 && (
+        <div role="note" className="m-3 rounded-lg border border-warn/40 bg-warn/10 p-3 text-[11px] text-warn space-y-1">
+          {(properties.design_warnings as string[]).map((warning, index) => <p key={index}>{warning}</p>)}
+        </div>
+      )}
+
       {Boolean(properties.overall_slope) && (
         <div className="border-t border-edge p-3 bg-surface-overlay/50 font-mono" role="note">
           <div className="text-xs text-warn font-bold mb-1 flex items-center gap-1.5">
@@ -356,6 +374,30 @@ export default function RightSidebar({
             <path d="M6 3.5 10.5 8 6 12.5" />
           </svg>
         </button>
+      </div>
+
+      <div className="border-b border-edge p-2.5 bg-surface-sunken/50">
+        <div className="eyebrow mb-2">Mine components · {scene.length}</div>
+        <div className="max-h-28 overflow-y-auto space-y-1 scrollbar-thin">
+          {scene.length === 0 && <p className="text-[11px] text-fg-faint">Describe a component to begin.</p>}
+          {scene.map(item => (
+            <button key={item.id} type="button" onClick={() => onSelectSceneObject?.(item.id)}
+              className={`w-full rounded-md border px-2 py-1.5 text-left text-[11px] truncate ${selectedSceneObject?.id === item.id ? 'border-edge-accent bg-accent-dim text-accent' : 'border-edge text-fg-muted hover:bg-surface-hover'}`}
+              aria-pressed={selectedSceneObject?.id === item.id} title={item.name}>
+              {item.name}
+            </button>
+          ))}
+        </div>
+        {selectedSceneObject && !selectedSceneObject.params.data_source && (
+          <div className="mt-2 border-t border-edge pt-2">
+            <div className="text-[10px] text-fg-muted mb-1">Position in plan (m)</div>
+            <div className="flex gap-1.5 items-center">
+              <label className="text-[10px] text-fg-faint">X<input type="number" value={selectedSceneObject.origin.x} onChange={event => onMoveSceneObject?.(selectedSceneObject.id, Number(event.target.value), selectedSceneObject.origin.y)} className="input w-full text-xs" /></label>
+              <label className="text-[10px] text-fg-faint">Y<input type="number" value={selectedSceneObject.origin.y} onChange={event => onMoveSceneObject?.(selectedSceneObject.id, selectedSceneObject.origin.x, Number(event.target.value))} className="input w-full text-xs" /></label>
+              <button type="button" className="btn px-2 h-8 text-[10px] text-danger mt-3" onClick={() => onDeleteSceneObject?.(selectedSceneObject.id)} title="Delete selected component (Undo can restore it)">Delete</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tab bar */}

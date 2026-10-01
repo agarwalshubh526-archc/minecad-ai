@@ -1,14 +1,18 @@
 'use client';
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import type { GeometryData, LayerInfo, CadPrimitive } from '@/types';
+import type { GeometryData, LayerInfo, CadPrimitive, SceneObject } from '@/types';
 import { dxfColor } from '@/types';
 import { buildSheetFrame, SHEET_LAYER } from '@/lib/sheetFrame';
 
 interface Canvas2DProps {
   geometry: GeometryData | null;
   layers: LayerInfo[];
-  onSelectObject?: (index: number) => void;
+  sceneObjects?: SceneObject[];
+  selectedObjectId?: string | null;
+  onSelectObject?: (id: string) => void;
+  onMoveObject?: (id: string, x: number, y: number) => void;
+  onDeleteObject?: (id: string) => void;
   // Identifies the project/type being viewed; a change triggers an auto-fit
   fitKey?: string | null;
   // AutoCAD-style drawing sheet (frame, title block, north arrow, grid labels)
@@ -17,7 +21,7 @@ interface Canvas2DProps {
   sheetObjectType?: string;
 }
 
-export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = false, sheetProjectName = 'Untitled', sheetObjectType = '' }: Canvas2DProps) {
+export default function Canvas2D({ geometry, layers, sceneObjects = [], selectedObjectId = null, onSelectObject, onMoveObject, onDeleteObject, fitKey = null, sheetMode = false, sheetProjectName = 'Untitled', sheetObjectType = '' }: Canvas2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -25,7 +29,9 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
   const [cursorWorld, setCursorWorld] = useState({ x: 0, y: 0 });
 
-  const [activeTool, setActiveTool] = useState<'pan' | 'coordinate' | 'distance' | 'area'>('pan');
+  const [activeTool, setActiveTool] = useState<'select' | 'pan' | 'coordinate' | 'distance' | 'area'>('select');
+  const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
+  const dragObjectRef = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [measurePoints, setMeasurePoints] = useState<Array<{ x: number; y: number }>>([]);
   const [legendOpen, setLegendOpen] = useState(true);
 
@@ -35,6 +41,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
   const hasUserTransformed = useRef(false);
   const lastFitKey = useRef<string | null | undefined>(undefined);
   const cursorRafRef = useRef<number | null>(null);
+  const mouseDownRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   // Touch gesture tracking (pointer events; mouse keeps the existing path)
   const touchPointersRef = useRef(new Map<number, { x: number; y: number }>());
@@ -228,6 +235,20 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       for (const prim of sheetFrame.primitives) drawPrim(prim);
     }
 
+    const selected = sceneObjects.find(item => item.id === selectedObjectId);
+    if (selected) {
+      const b = selected.geometry.bounds;
+      const origin = dragPreview?.id === selected.id ? dragPreview : selected.origin;
+      const [left, top] = worldToScreen(b.minX + origin.x, b.maxY + origin.y);
+      const [right, bottom] = worldToScreen(b.maxX + origin.x, b.minY + origin.y);
+      ctx.save();
+      ctx.strokeStyle = '#f7b84e';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([7, 5]);
+      ctx.strokeRect(left - 5, top - 5, right - left + 10, bottom - top + 10);
+      ctx.restore();
+    }
+
     // (No screen-space scale bar in sheet mode: the sheet frame draws its own
     // world-space bar in the bottom margin, so it appears in exports too.)
 
@@ -325,7 +346,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       }
     }
 
-  }, [geometry, transform, visibleLayers, measurePoints, activeTool, sheetFrame, sheetMode]);
+  }, [geometry, transform, visibleLayers, measurePoints, activeTool, sheetFrame, sheetMode, sceneObjects, selectedObjectId, dragPreview]);
 
   useEffect(() => {
     draw();
@@ -445,6 +466,16 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) {
+      mouseDownRef.current = { x: e.clientX, y: e.clientY, moved: false };
+      if (activeTool === 'select') {
+        const point = worldFromClient(e.clientX, e.clientY);
+        const item = findObjectAt(point.x, point.y);
+        if (item) {
+          onSelectObject?.(item.id);
+          dragObjectRef.current = { id: item.id, startX: point.x, startY: point.y, originX: item.origin.x, originY: item.origin.y };
+        }
+        return;
+      }
       if (activeTool === 'distance' || activeTool === 'area' || activeTool === 'coordinate') {
         addMeasurePoint();
         return;
@@ -456,6 +487,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (mouseDownRef.current && Math.hypot(e.clientX - mouseDownRef.current.x, e.clientY - mouseDownRef.current.y) > 5) mouseDownRef.current.moved = true;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -466,6 +498,11 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
     const wx = (mx - rect.width / 2 - transform.x) / transform.scale;
     const wy = -(my - rect.height / 2 - transform.y) / transform.scale;
     cursorWorldRef.current = { x: wx, y: wy };
+    if (dragObjectRef.current && mouseDownRef.current?.moved) {
+      const drag = dragObjectRef.current;
+      setDragPreview({ id: drag.id, x: Math.round((drag.originX + wx - drag.startX) * 10) / 10,
+        y: Math.round((drag.originY + wy - drag.startY) * 10) / 10 });
+    }
     if (cursorRafRef.current === null) {
       cursorRafRef.current = requestAnimationFrame(() => {
         cursorRafRef.current = null;
@@ -479,6 +516,30 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
       setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
       setLastMouse({ x: e.clientX, y: e.clientY });
     }
+  };
+
+  const worldFromClient = (clientX: number, clientY: number) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return { x: (clientX - rect.left - rect.width / 2 - transform.x) / transform.scale,
+      y: -(clientY - rect.top - rect.height / 2 - transform.y) / transform.scale };
+  };
+
+  const findObjectAt = (x: number, y: number) => {
+    const hits = sceneObjects.filter(item => {
+      const b = item.geometry.bounds;
+      return x >= b.minX + item.origin.x && x <= b.maxX + item.origin.x &&
+        y >= b.minY + item.origin.y && y <= b.maxY + item.origin.y;
+    });
+    hits.sort((a, b) => {
+      const ab = a.geometry.bounds, bb = b.geometry.bounds;
+      return (ab.maxX - ab.minX) * (ab.maxY - ab.minY) - (bb.maxX - bb.minX) * (bb.maxY - bb.minY);
+    });
+    return hits[0];
+  };
+
+  const selectAtCursor = () => {
+    const item = findObjectAt(cursorWorldRef.current.x, cursorWorldRef.current.y);
+    if (item) onSelectObject?.(item.id);
   };
 
   // ── Touch gestures (pointer events; `touch-action: none` on the canvas) ──
@@ -582,8 +643,9 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
     const tap = tapRef.current;
     if (tap && tap.id === e.pointerId) {
       tapRef.current = null;
-      if (!tap.dragged && Date.now() - tap.t < 500 && activeTool !== 'pan') {
-        addMeasurePoint();
+      if (!tap.dragged && Date.now() - tap.t < 500) {
+        if (activeTool === 'select') selectAtCursor();
+        else addMeasurePoint();
       }
     }
   };
@@ -595,12 +657,24 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
     };
   }, []);
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = (e: React.MouseEvent) => {
+    setIsDragging(false);
+    if (dragObjectRef.current && mouseDownRef.current?.moved) {
+      const drag = dragObjectRef.current;
+      const point = worldFromClient(e.clientX, e.clientY);
+      onMoveObject?.(drag.id, Math.round((drag.originX + point.x - drag.startX) * 10) / 10,
+        Math.round((drag.originY + point.y - drag.startY) * 10) / 10);
+    }
+    dragObjectRef.current = null;
+    setDragPreview(null);
+  };
 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden select-none">
       {/* Top Surveying Tool Bar Overlay */}
       <div className="absolute top-3 left-3 right-14 bg-surface-overlay/90 backdrop-blur border border-edge rounded-lg p-1 flex items-center gap-1 z-30 shadow-[var(--shadow-pop)] font-mono text-[11px] overflow-x-auto scrollbar-none">
+        <button onClick={fitView} className="px-2.5 py-2 md:py-1 rounded text-fg-muted hover:bg-surface-hover border border-edge shrink-0" title="Fit all mine components in view">Fit all</button>
+        <button onClick={() => { setActiveTool('select'); setMeasurePoints([]); }} className={`px-2.5 py-2 md:py-1 rounded shrink-0 ${activeTool === 'select' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`} title="Select and drag a mine component">Select/Move</button>
         <button
           onClick={() => { setActiveTool('pan'); setMeasurePoints([]); }}
           className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'pan' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
@@ -689,7 +763,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
         className="w-full h-full block cursor-crosshair touch-none"
         tabIndex={0}
         role="application"
-        aria-label="2D mine drawing. Use arrow keys to move the inspection cursor, Space to add a measurement point, and Escape to clear points."
+        aria-label="2D mine drawing. Select and drag components, use arrow keys to move the inspection cursor, Space to add a measurement point, and Escape to return to Select."
         onKeyDown={e => {
           const step = 10 / Math.max(transform.scale, 0.1);
           const next = { ...cursorWorldRef.current };
@@ -698,7 +772,8 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
           else if (e.key === 'ArrowUp') next.y += step;
           else if (e.key === 'ArrowDown') next.y -= step;
           else if (e.key === ' ' && activeTool !== 'pan') { e.preventDefault(); addMeasurePoint(); return; }
-          else if (e.key === 'Escape') { setMeasurePoints([]); return; }
+          else if (e.key === 'Escape') { setMeasurePoints([]); setActiveTool('select'); return; }
+          else if ((e.key === 'Delete' || e.key === 'Backspace') && activeTool === 'select' && selectedObjectId) { e.preventDefault(); onDeleteObject?.(selectedObjectId); return; }
           else return;
           e.preventDefault();
           cursorWorldRef.current = next;
@@ -707,6 +782,7 @@ export default function Canvas2D({ geometry, layers, fitKey = null, sheetMode = 
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onClick={() => { if (activeTool === 'select' && mouseDownRef.current && !mouseDownRef.current.moved) selectAtCursor(); mouseDownRef.current = null; }}
         onMouseLeave={handleMouseUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

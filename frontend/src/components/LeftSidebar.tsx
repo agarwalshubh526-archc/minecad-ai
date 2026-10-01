@@ -116,7 +116,7 @@ const TEMPLATES: MineTemplate[] = [
   {
     id: 'open_pit', name: 'Open Pit Mine', category: 'Surface Mining', icon: '⛏️',
     object_type: 'open_pit', description: 'Multi-bench open pit with haul road',
-    defaultParams: { bench_height: 10, bench_width: 8, num_benches: 5, pit_length: 300, pit_width: 200, haul_road_width: 22, overall_slope: 55, batter_angle: 75 },
+    defaultParams: { bench_height: 10, bench_width: 8, num_benches: 5, pit_length: 300, pit_width: 200, haul_road_width: 22, batter_angle: 75 },
   },
   {
     id: 'cut_fill', name: 'Cut & Fill Volume', category: 'Geotechnical & Earthworks', icon: '📊',

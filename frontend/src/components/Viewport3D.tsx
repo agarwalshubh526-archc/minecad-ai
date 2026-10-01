@@ -12,6 +12,8 @@ interface Viewport3DProps {
   viewMode: 'solid' | 'wireframe';
   showSectionView: boolean;
   sectionHeight: number;
+  selectedObjectId?: string | null;
+  onSelectObject?: (id: string) => void;
 }
 
 // Layers that render translucent in solid mode (underground workings visible).
@@ -19,7 +21,7 @@ const TRANSLUCENT_LAYERS = new Set(['ROOF']);
 
 // Single CAD mesh: flat-shaded solid, or x-ray wireframe (faint fill + crisp
 // edges instead of triangle-soup wireframe).
-function CadMesh({ mesh, wireframe, clipPlanes }: { mesh: MeshData; wireframe: boolean; clipPlanes: THREE.Plane[] | null }) {
+function CadMesh({ mesh, wireframe, selected, onSelect, clipPlanes }: { mesh: MeshData; wireframe: boolean; selected: boolean; onSelect?: (id: string) => void; clipPlanes: THREE.Plane[] | null }) {
   const geom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const verts: number[] = [];
@@ -40,9 +42,9 @@ function CadMesh({ mesh, wireframe, clipPlanes }: { mesh: MeshData; wireframe: b
 
   // CAD wireframe: real edges (slope breaks + outlines) over a ghost fill
   const edges = useMemo(() => {
-    if (!wireframe) return null;
+    if (!wireframe && !selected) return null;
     return new THREE.EdgesGeometry(geom, 20);
-  }, [wireframe, geom]);
+  }, [wireframe, selected, geom]);
 
   // Dispose GPU buffers when the geometry is replaced or unmounted
   useEffect(() => {
@@ -56,7 +58,7 @@ function CadMesh({ mesh, wireframe, clipPlanes }: { mesh: MeshData; wireframe: b
   const clips = clipPlanes ?? undefined;
 
   return (
-    <group>
+    <group onClick={event => { if (mesh.objectId) { event.stopPropagation(); onSelect?.(mesh.objectId); } }}>
       <mesh geometry={geom} castShadow receiveShadow>
         {wireframe ? (
           <meshBasicMaterial
@@ -82,7 +84,7 @@ function CadMesh({ mesh, wireframe, clipPlanes }: { mesh: MeshData; wireframe: b
       </mesh>
       {edges && (
         <lineSegments geometry={edges}>
-          <lineBasicMaterial color={mesh.color} transparent opacity={0.85} clippingPlanes={clips} />
+          <lineBasicMaterial color={selected ? '#f7b84e' : mesh.color} transparent opacity={selected ? 1 : 0.85} clippingPlanes={clips} />
         </lineSegments>
       )}
     </group>
@@ -161,7 +163,7 @@ function CameraRecenter({ center, radius }: { center: [number, number, number]; 
   return null;
 }
 
-export default function Viewport3D({ geometry, layers, viewMode, showSectionView, sectionHeight }: Viewport3DProps) {
+export default function Viewport3D({ geometry, layers, viewMode, showSectionView, sectionHeight, selectedObjectId = null, onSelectObject }: Viewport3DProps) {
   const meshes = useMemo(() => {
     const hidden = new Set(layers.filter(l => !l.visible).map(l => l.name));
     return (geometry?.meshes ?? []).filter(m => !m.layer || !hidden.has(m.layer));
@@ -271,6 +273,8 @@ export default function Viewport3D({ geometry, layers, viewMode, showSectionView
             key={i}
             mesh={mesh}
             wireframe={viewMode === 'wireframe'}
+            selected={mesh.objectId === selectedObjectId}
+            onSelect={onSelectObject}
             clipPlanes={clipPlane}
           />
         ))}

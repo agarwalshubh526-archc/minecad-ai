@@ -56,8 +56,14 @@ export function saveWorkspace(value: WorkspaceRecord): Promise<void> {
 export function isProjectFile(value: unknown): value is ProjectFile {
   if (!value || typeof value !== 'object') return false;
   const p = value as Partial<ProjectFile>;
+  const validScene = p.scene === undefined || (Array.isArray(p.scene) && p.scene.length <= 16 && p.scene.every(item =>
+    !!item && typeof item.id === 'string' && typeof item.name === 'string' &&
+    typeof item.object_type === 'string' && !!item.params && typeof item.params === 'object' &&
+    Number.isFinite(item.origin?.x) && Number.isFinite(item.origin?.y) &&
+    !!item.geometry && Array.isArray(item.geometry.primitives) && Array.isArray(item.geometry.meshes) &&
+    Array.isArray(item.geometry.layers) && !!item.geometry.bounds));
   return typeof p.name === 'string' && p.name.length <= 120 &&
     typeof p.object_type === 'string' && !!p.properties && typeof p.properties === 'object' &&
     !!p.geometry && Array.isArray(p.geometry.primitives) && Array.isArray(p.geometry.meshes) &&
-    Array.isArray(p.geometry.layers) && !!p.geometry.bounds;
+    Array.isArray(p.geometry.layers) && !!p.geometry.bounds && validScene;
 }

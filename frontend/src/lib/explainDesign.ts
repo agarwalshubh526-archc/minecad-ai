@@ -43,7 +43,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
       const batter = num(props, 'batter_angle', 75);
       const wasteTonnes = num(props, 'waste_tonnes', 0);
       const wasteLine = wasteTonnes > 0
-        ? `Opening this pit moves ≈${(wasteTonnes / 1e6).toFixed(1)} Mt of waste rock (at ~2.7 t/m³) before any ore is reached.`
+        ? `A simplified flat-ground model estimates ≈${(wasteTonnes / 1e6).toFixed(1)} Mt of excavated material at an assumed 2.7 t/m³. No orebody or site terrain is modelled.`
         : '';
       return [
         {
@@ -66,7 +66,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
         {
           title: 'Haul road & stability',
           points: [
-            `The ${hrw} m wide haul road winds down the side so trucks can drive in and out.`,
+            `An illustrative ${hrw} m wide ramp is shown; its grade, turning radius and access are not checked.`,
             glossaryLine('haul_road_width') ?? '',
             glossaryLine('overall_slope') ?? '',
             `Your overall slope is ${slope}°. This drawing does not assess slope stability; use site-specific geotechnical data and professional review.`,
@@ -122,7 +122,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
       const na = num(props, 'num_airways', 6);
       const al = num(props, 'airway_length', 100);
       const sd = num(props, 'shaft_diameter', 6);
-      const fp = num(props, 'fan_power', 200);
+      const fp = num(props, 'fan_power_kw', 200);
       return [
         {
           title: 'What you are looking at',
@@ -144,7 +144,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
           title: 'The fan',
           points: [
             glossaryLine('fan_power') ?? '',
-            `Your main fan is ${fp} kW. Fans are usually placed on the exhaust side so the mine stays under slight suction — if anything leaks, fresh air flows in, not fumes out.`,
+            `The entered fan rating is ${fp} kW. Pressure losses, actual duty and airflow distribution are not calculated.`,
           ],
         },
         {
@@ -384,7 +384,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
           points: [
             `The orange box at the face is the double-drum shearer, currently at ${sp.toFixed(0)} m along the face — it cuts a thin slice (~0.8 m) each pass while the conveyor behind it carries the coal away.`,
             glossaryLine('num_supports') ?? '',
-            `Your face carries ${ns} powered roof supports — each a 20-tonne hydraulic shield that holds the roof up as the shearer passes, then lets it collapse behind.`,
+            `The diagram places ${ns} powered roof supports along the face. Their required capacity is not calculated.`,
           ],
         },
         {
@@ -423,7 +423,7 @@ export function buildExplanation(objectType: string, props: Props): ExplainSecti
             `The cut shape is a trapezoid, so its area ≈ (top + bottom)/2 × depth = ${area.toFixed(0)} m².`,
             `Multiplying by a 100 m strike length gives ${Math.round(vol).toLocaleString()} m³ of rock.`,
             glossaryLine('rock_density') ?? '',
-            `At ${den} t/m³ that is about ${Math.round(ton).toLocaleString()} tonnes to move — this single number decides your fleet size and cost.`,
+            `At the entered density of ${den} t/m³, the simplified section estimates about ${Math.round(ton).toLocaleString()} tonnes. It is not a site earthworks model.`,
           ],
         },
         {

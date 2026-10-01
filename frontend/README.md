@@ -1,7 +1,7 @@
 # MineCAD AI frontend
 
 Next.js app for conceptual mining CAD drawings. The hosted app includes its own
-`/api/health`, `/api/generate`, `/api/generate-direct`, `/api/export`, and
+`/api/health`, `/api/generate`, `/api/generate-direct`, `/api/scene-plan`, `/api/export`, and
 `/api/deepseek/chat` routes; no separate Python deployment is needed for the
 website.
 
@@ -16,7 +16,27 @@ npm run smoke
 ```
 
 The smoke check starts the production build locally and checks health,
-generation, invalid prompts, and all five export formats.
+multi-component planning, unsupported requests, slope geometry, generation,
+invalid prompts, and all five export formats.
+
+## Prompt-led layout
+
+- A prompt can request several supported components, such as an open pit and a
+  conveyor. `Create` starts a new project; `add` updates or adds to the selected
+  project. Objects can be selected in 2D or 3D, moved in the 2D view or Inspector,
+  edited in the Inspector, deleted, and restored with Undo.
+- The Local planner handles named components and supported parameters. DeepSeek
+  can interpret a multi-component request when the user supplies an API key.
+  Unsupported named components are reported before any partial design is made.
+- Multiple components are auto-placed side by side. Their physical connection,
+  clashes, grades, and access are not yet validated. The plan is conceptual.
+- Imported survey stations can remain as a fixed reference while components
+  are added to the same scene. Generated shapes do not yet conform to measured
+  terrain, geology, or survey boundaries.
+- Overall pit slope now drives bench geometry when requested. If bench width is
+  the controlling parameter, the displayed overall slope is calculated from the
+  actual bench dimensions. Conflicting values and simplified road/volume
+  assumptions appear as design warnings.
 
 ## Data and providers
 

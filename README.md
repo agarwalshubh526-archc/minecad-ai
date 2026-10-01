@@ -1,6 +1,6 @@
 # MineCAD AI
 
-MineCAD AI is an AI-assisted CAD web app for mining engineering: describe a design in natural language ("open pit with 12m benches, 6 levels") and get interactive 2D/3D CAD geometry — open pits, room-and-pillar layouts, ventilation networks, conveyors, blast patterns, declines, survey traverses, topo contours, borehole sections, longwall panels, and cut-and-fill volumes — exportable as DXF, SVG, PDF, OBJ, or STL.
+MineCAD AI is a prompt-led conceptual mine layout app. A request can place several supported components in one editable 2D/3D scene — open pits, room-and-pillar layouts, ventilation networks, conveyors, blast patterns, declines, survey traverses, topo contours, borehole sections, longwall panels, and cut-and-fill volumes — exportable as DXF, SVG, PDF, OBJ, or STL. It does not yet validate that components connect or meet site engineering requirements.
 
 ## Architecture
 

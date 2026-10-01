@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import type { AppState, ProjectFile, LayerInfo, GeometryData } from '@/types';
+import type { AppState, ProjectFile, LayerInfo, GeometryData, SceneObject } from '@/types';
 import type { MineTemplateType } from '@/components/LeftSidebar';
 import Toolbar from '@/components/Toolbar';
 import LeftSidebar from '@/components/LeftSidebar';
@@ -20,6 +20,8 @@ import { exportDXF, exportSVG, exportOBJ, exportSTL } from '@/lib/cadExport';
 import { buildSheetFrame } from '@/lib/sheetFrame';
 import { isProjectFile, loadWorkspace, saveWorkspace } from '@/lib/projectStore';
 import { importSurveyCsv } from '@/lib/surveyImport';
+import { combineScene, createSceneObject, nextObjectOrigin, sceneFromProject } from '@/lib/sceneModel';
+import { planSceneLocal, type ScenePlan } from '@/lib/scenePlanner';
 import LegalFooter from '@/components/LegalFooter';
 import OnboardingTour from '@/components/OnboardingTour';
 
@@ -36,12 +38,22 @@ function layersForGeometry(geometry: GeometryData, previous: LayerInfo[] = []): 
   return [...byName.values()];
 }
 
+function withScene(project: ProjectFile): ProjectFile {
+  if (project.scene) return project;
+  const scene = sceneFromProject(project);
+  if (!scene.length) return { ...project, scene: [] };
+  const geometry = combineScene(scene);
+  return { ...project, scene, geometry, properties: geometry.properties };
+}
+
 export default function Home() {
   // App state
   const [activeView, setActiveView] = useState<'2d' | '3d'>('2d');
   const [projects, setProjects] = useState<ProjectFile[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectFile | null>(null);
   const [geometry, setGeometry] = useState<GeometryData | null>(null);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [sceneFeedback, setSceneFeedback] = useState<string[]>([]);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [workspaceError, setWorkspaceError] = useState('');
@@ -68,6 +80,7 @@ export default function Home() {
     setProjects(items => items.map(p => p.id === previous.id ? previous : p));
     setSelectedProject(previous);
     setGeometry(previous.geometry);
+    setSelectedObjectId(sceneFromProject(previous)[0]?.id ?? null);
     setLayers(previous.geometry ? layersForGeometry(previous.geometry) : []);
     setHistoryRevision(v => v + 1);
   };
@@ -83,7 +96,7 @@ export default function Home() {
   const [generationError, setGenerationError] = useState('');
   const [generationMethod, setGenerationMethod] = useState('Local rule-based geometry');
   // AutoCAD-style drawing sheet around the 2D view (default ON)
-  const [sheetMode, setSheetMode] = useState(true);
+  const [sheetMode, setSheetMode] = useState(false);
   const [viewMode3D, setViewMode3D] = useState<'solid' | 'wireframe'>('solid');
   const [showSectionView, setShowSectionView] = useState(false);
   const [sectionHeight, setSectionHeight] = useState(0);
@@ -99,6 +112,8 @@ export default function Home() {
   // beyond this so there's no hydration mismatch)
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const activeScene = sceneFromProject(selectedProject);
+  const selectedObject = activeScene.find(item => item.id === selectedObjectId) ?? activeScene[0] ?? null;
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -140,23 +155,32 @@ export default function Home() {
       }
 
       if (operationId !== operationIdRef.current) return;
+      const sceneObject: SceneObject = {
+        id: crypto.randomUUID(), name: template.name, object_type: template.object_type,
+        params: geom.properties, origin: { x: 0, y: 0 }, geometry: geom,
+      };
+      const sceneGeometry = combineScene([sceneObject]);
       // Create new project file
       const newProj: ProjectFile = {
         id: Math.random().toString(36).slice(2, 11),
         name: `${template.name} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
         object_type: template.object_type,
         created_at: new Date().toISOString(),
-        geometry: geom,
-        properties: geom.properties,
+        geometry: sceneGeometry,
+        properties: sceneGeometry.properties,
+        scene: [sceneObject],
       };
 
       setProjects((prev) => [newProj, ...prev]);
       setSelectedProject(newProj);
-      setGeometry(geom);
+      setGeometry(sceneGeometry);
+      setSelectedObjectId(sceneObject.id);
+      setSceneFeedback(['Template dimensions are assumptions. Edit an object in the Inspector or describe a change.',
+        ...(Array.isArray(geom.properties.design_warnings) ? geom.properties.design_warnings as string[] : [])]);
       setGenerationMethod('Template geometry');
       
       // Initialize layers list
-      setLayers(layersForGeometry(geom));
+      setLayers(layersForGeometry(sceneGeometry));
 
     } catch (e) {
       if (operationId !== operationIdRef.current) return;
@@ -174,86 +198,90 @@ export default function Home() {
     setIsGenerating(true);
     setGenerationError('');
     setCommandHistory((prev) => [...prev, `Command: ${prompt}`]);
-
-    const activeType = selectedProject?.object_type || 'open_pit';
-    const activeProps = selectedProject?.properties || {};
-
     try {
-      if (activeProps.data_source) throw new Error('Imported survey data is read-only. Select a template to create a conceptual design.');
-      let geom: GeometryData;
-      let parsedType = activeType;
-      let parsedParams = { ...activeProps };
-
-      if (aiConfig.provider !== 'local') {
-        // Hosted API calls either use the selected provider or return an explicit error.
-        try {
-          const res = await apiClient.generateFromPrompt(
-            prompt,
-            aiConfig.provider,
-            aiConfig.model,
-            aiConfig.baseUrl,
-            aiConfig.apiKey,
-            { ...activeProps, _object_type: activeType }
-          );
-          if (operationId !== operationIdRef.current) return;
-
-          if (res.success) {
-            geom = res.geometry;
-            parsedType = res.object_type;
-            parsedParams = res.params;
-            setGenerationMethod(res.parse_method === 'deepseek' ? 'DeepSeek AI interpretation' : 'Parameter edit');
-            setCommandHistory((prev) => [
-              ...prev,
-              `Success: AI generated geometry. Parse method: ${res.parse_method}`,
-            ]);
-            if (res.interpretation) {
-              setParseNote({ id: Date.now(), text: res.interpretation });
-            }
-          } else {
-            throw new Error(res.error);
-          }
-        } catch (err) {
-          throw new Error(`Selected AI provider failed: ${err instanceof Error ? err.message : String(err)}. Switch to Local to use rule-based generation.`);
-        }
-      } else {
-        // Run client-side parsing (local NLP rules, v2 — parity with backend)
-        const editProps = clientGeometry.parseEditCommand(prompt, { ...activeProps, _object_type: activeType });
-        if (editProps) {
-          parsedParams = editProps;
-        } else {
-          const clientParsed = clientGeometry.parsePromptLocal(prompt);
-          if (!clientParsed.recognized) throw new Error('I could not identify a design type or parameter. Try an example prompt or choose a template.');
-          parsedType = clientParsed.object_type ?? activeType;
-          parsedParams = { ...activeProps, ...clientParsed.params };
-          setParseNote({ id: Date.now(), text: clientParsed.interpretation });
-        }
-
-        geom = clientGeometry.generateGeometry(parsedType, parsedParams);
-        setGenerationMethod('Local rule-based interpretation');
-        setCommandHistory((prev) => [...prev, 'Success: Render updated local CAD design.']);
-      }
-
+      const plan: ScenePlan = aiConfig.provider === 'deepseek'
+        ? await apiClient.planSceneWithDeepSeek(prompt, aiConfig.apiKey, aiConfig.model)
+        : planSceneLocal(prompt);
       if (operationId !== operationIdRef.current) return;
-      // Update active project
+      if (plan.unsupported.length) throw new Error(`Not supported yet: ${plan.unsupported.join(', ')}. No partial design was created.`);
+      const editTarget = selectedObject;
+      const isEditPhrase = /^(?:add|remove|increase|decrease|reduce|set|change|make|widen|deepen|raise|lower)\b/i.test(prompt);
+      const editParams = aiConfig.provider === 'local' && editTarget && isEditPhrase &&
+        (plan.objects.length === 0 || (plan.objects.length === 1 && plan.objects[0].object_type === editTarget.object_type))
+        ? clientGeometry.parseEditCommand(prompt, { ...editTarget.params, _object_type: editTarget.object_type }) : null;
+      const isNewProject = !selectedProject || (plan.action === 'replace' && !editParams);
+      if (editTarget?.params.data_source && (editParams || !plan.objects.length) && !isNewProject) {
+        throw new Error('Imported survey points are read-only. Select another component to edit.');
+      }
+      if (selectedProject?.properties.data_source && !isNewProject && (editParams || !plan.objects.length)) {
+        throw new Error('Imported survey points are read-only. Add a supported design component or start a new project with “Create …”.');
+      }
+      let scene = isNewProject ? [] as SceneObject[] : sceneFromProject(selectedProject);
+      let selectedId: string | null = null;
+      if (!plan.objects.length || editParams) {
+        const current = scene.find(item => item.id === selectedObjectId) ?? scene[0];
+        if (!current || aiConfig.provider !== 'local') throw new Error('Name a supported mine component, or select an object and describe a parameter change.');
+        const edited = editParams ?? clientGeometry.parseEditCommand(prompt, { ...current.params, _object_type: current.object_type });
+        if (!edited) throw new Error('I could not identify a supported component or parameter change.');
+        const params = { ...edited };
+        if (/\bslope\b/i.test(prompt)) params._design_driver = 'overall_slope';
+        if (/\bbench\s+width\b/i.test(prompt)) params._design_driver = 'bench_width';
+        const replacement = { ...createSceneObject(current.object_type, params, current.origin), id: current.id, name: current.name };
+        scene = scene.map(item => item.id === current.id ? replacement : item);
+        selectedId = current.id;
+      } else {
+        if (plan.objects.length > 8) throw new Error('A prompt can add at most eight mine components.');
+        for (const request of plan.objects) {
+          const target = plan.action === 'add' && !/\badd\s+another\b/i.test(prompt)
+            ? scene.find(item => item.object_type === request.object_type) : undefined;
+          if (target?.params.data_source) throw new Error('Imported survey points cannot be regenerated. Add another component instead.');
+          const params = { ...target?.params, ...request.params };
+          if (target?.object_type === 'conveyor' && typeof request.params.length === 'number' &&
+            request.params.end_x == null && request.params.end_y == null) {
+            const sx = Number(params.start_x ?? 0), sy = Number(params.start_y ?? 0);
+            const dx = Number(target.params.end_x ?? 200) - sx, dy = Number(target.params.end_y ?? 0) - sy;
+            const oldLength = Math.hypot(dx, dy) || 1;
+            params.end_x = sx + dx * request.params.length / oldLength;
+            params.end_y = sy + dy * request.params.length / oldLength;
+          }
+          if (request.params.overall_slope != null) params._design_driver = 'overall_slope';
+          else if (request.params.bench_width != null) params._design_driver = 'bench_width';
+          const fresh = createSceneObject(request.object_type, params);
+          const item = target
+            ? { ...fresh, id: target.id, name: target.name, origin: target.origin }
+            : { ...fresh, origin: nextObjectOrigin(scene, fresh.geometry) };
+          scene = target ? scene.map(existing => existing.id === target.id ? item : existing) : [...scene, item];
+          selectedId = item.id;
+        }
+      }
+      if (scene.length > 16) throw new Error('This project has reached its 16-component limit.');
+      const combined = combineScene(scene);
+      const warnings = scene.flatMap(item => Array.isArray(item.geometry.properties.design_warnings)
+        ? item.geometry.properties.design_warnings as string[] : []);
       const updatedProj: ProjectFile = {
-        id: selectedProject?.id || Math.random().toString(36).slice(2, 11),
-        name: selectedProject?.name || `Project ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-        object_type: parsedType,
-        created_at: selectedProject?.created_at || new Date().toISOString(),
-        geometry: geom,
-        properties: geom.properties,
+        id: isNewProject ? crypto.randomUUID() : selectedProject!.id,
+        name: isNewProject ? (scene.length > 1 ? 'Mine layout' : scene[0]?.name ?? 'Mine layout') : selectedProject!.name,
+        object_type: scene.length === 1 ? scene[0].object_type : 'mine_layout',
+        created_at: isNewProject ? new Date().toISOString() : selectedProject!.created_at,
+        scene, geometry: combined, properties: combined.properties,
       };
-
-      if (selectedProject) {
+      if (!isNewProject && selectedProject) {
         recordEdit(selectedProject);
         setProjects((prev) => prev.map((p) => (p.id === selectedProject.id ? updatedProj : p)));
       } else {
         setProjects((prev) => [updatedProj, ...prev]);
       }
       setSelectedProject(updatedProj);
-      setGeometry(geom);
-
-      setLayers(prev => layersForGeometry(geom, prev));
+      setGeometry(combined);
+      setSelectedObjectId(selectedId);
+      setSceneFeedback([...plan.assumptions,
+        ...(scene.some(item => item.params.data_source) && scene.length > 1
+          ? ['Imported survey stations are reference points; new geometry is not fitted to measured terrain or geology.'] : []),
+        ...warnings]);
+      setGenerationMethod(aiConfig.provider === 'deepseek' ? 'DeepSeek scene plan + parametric geometry' : 'Local scene plan + parametric geometry');
+      setParseNote({ id: Date.now(), text: plan.interpretation });
+      setLayers(prev => layersForGeometry(combined, prev));
+      setCommandHistory(prev => [...prev, `Success: ${scene.length} component(s) in ${updatedProj.name}.`]);
 
     } catch (e) {
       if (operationId !== operationIdRef.current) return;
@@ -269,32 +297,21 @@ export default function Home() {
   // Debounced (300ms trailing) so each keystroke doesn't regenerate and
   // reset the canvas view mid-edit.
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingUpdateRef = useRef<{ project: ProjectFile; params: Record<string, unknown> } | null>(null);
+  const pendingUpdateRef = useRef<{ project: ProjectFile; objectId: string; params: Record<string, unknown> } | null>(null);
 
-  const applyPropertyUpdate = async (project: ProjectFile, newParams: Record<string, unknown>) => {
+  const applyPropertyUpdate = async (project: ProjectFile, objectId: string, newParams: Record<string, unknown>) => {
     const operationId = operationIdRef.current;
     try {
-      let geom: GeometryData;
-
-      if (aiConfig.provider !== 'local') {
-        try {
-          const res = await apiClient.generateDirect(project.object_type, newParams);
-          if (res.success) {
-            geom = res.geometry;
-          } else {
-            throw new Error(res.error);
-          }
-        } catch (err) {
-          console.warn('Direct backend call failed, fallback to client-side compiler:', err);
-          geom = clientGeometry.generateGeometry(project.object_type, newParams);
-        }
-      } else {
-        geom = clientGeometry.generateGeometry(project.object_type, newParams);
-      }
-
+      const scene = sceneFromProject(project);
+      const current = scene.find(item => item.id === objectId);
+      if (!current) return;
+      const replacement = { ...createSceneObject(current.object_type, newParams, current.origin), id: current.id, name: current.name };
+      const updatedScene = scene.map(item => item.id === objectId ? replacement : item);
+      const geom = combineScene(updatedScene);
       if (operationId !== operationIdRef.current) return;
       const updatedProj: ProjectFile = {
         ...project,
+        scene: updatedScene,
         geometry: geom,
         properties: geom.properties,
       };
@@ -313,17 +330,17 @@ export default function Home() {
 
   const handleUpdateProperties = (newParams: Record<string, unknown>) => {
     const project = selectedProject;
-    if (!project) return;
-    if (project.properties.data_source) return;
+    if (!project || !selectedObject) return;
+    if (selectedObject.params.data_source) return;
     operationIdRef.current++;
     setIsGenerating(false);
-    pendingUpdateRef.current = { project, params: newParams };
+    pendingUpdateRef.current = { project, objectId: selectedObject.id, params: newParams };
     if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     updateTimeoutRef.current = setTimeout(() => {
       updateTimeoutRef.current = null;
       const pending = pendingUpdateRef.current;
       pendingUpdateRef.current = null;
-      if (pending) applyPropertyUpdate(pending.project, pending.params);
+      if (pending) applyPropertyUpdate(pending.project, pending.objectId, pending.params);
     }, 300);
   };
 
@@ -439,12 +456,7 @@ export default function Home() {
       }
     }
 
-    if (!selectedProject) {
-      setCommandHistory((prev) => [...prev, `Error: Load a design template to use CLI properties.`]);
-      return;
-    }
-
-    const currentParams = { ...selectedProject.properties };
+    const currentParams = { ...selectedObject?.params };
     let changed = false;
 
     // Check single parameter setting
@@ -469,8 +481,9 @@ export default function Home() {
         };
 
         const targetField = cliMap[field];
-        if (targetField && targetField in currentParams) {
+        if (selectedObject && targetField && targetField in currentParams) {
           currentParams[targetField] = val;
+          if (targetField === 'bench_width') currentParams._design_driver = 'bench_width';
           changed = true;
           setCommandHistory((prev) => [...prev, `Command: set ${field} to ${val}`]);
         }
@@ -491,7 +504,7 @@ export default function Home() {
       };
 
       const targetField = incrementMap[item];
-      if (targetField && targetField in currentParams) {
+      if (selectedObject && targetField && targetField in currentParams) {
         const val = Number(currentParams[targetField]) || 0;
         currentParams[targetField] = Math.max(1, val + sign);
         changed = true;
@@ -575,16 +588,59 @@ export default function Home() {
 
   // Switch project files from sidebar selection
   const handleSelectProject = (proj: ProjectFile) => {
+    proj = withScene(proj);
     operationIdRef.current++;
     setIsGenerating(false);
     if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     pendingUpdateRef.current = null;
     setSelectedProject(proj);
+    setProjects(prev => prev.map(item => item.id === proj.id ? proj : item));
+    setSelectedObjectId(sceneFromProject(proj)[0]?.id ?? null);
+    setSceneFeedback([]);
     setGeometry(proj.geometry);
     if (proj.geometry) {
       setLayers(layersForGeometry(proj.geometry));
     }
     setCommandHistory((prev) => [...prev, `System: Loaded workspace "${proj.name}".`]);
+  };
+
+  const handleSelectSceneObject = (id: string) => {
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    pendingUpdateRef.current = null;
+    setSelectedObjectId(id);
+  };
+
+  const handleMoveSceneObject = (id: string, x: number, y: number) => {
+    if (!selectedProject || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (sceneFromProject(selectedProject).find(item => item.id === id)?.params.data_source) return;
+    operationIdRef.current++;
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    pendingUpdateRef.current = null;
+    const scene = sceneFromProject(selectedProject).map(item => item.id === id ? { ...item, origin: { x, y } } : item);
+    const combined = combineScene(scene);
+    const updated = { ...selectedProject, scene, geometry: combined, properties: combined.properties };
+    recordEdit(selectedProject);
+    setProjects(prev => prev.map(project => project.id === updated.id ? updated : project));
+    setSelectedProject(updated);
+    setGeometry(combined);
+    setLayers(prev => layersForGeometry(combined, prev));
+  };
+
+  const handleDeleteSceneObject = (id: string) => {
+    if (!selectedProject) return;
+    operationIdRef.current++;
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    pendingUpdateRef.current = null;
+    const scene = sceneFromProject(selectedProject).filter(item => item.id !== id);
+    const combined = combineScene(scene);
+    const updated = { ...selectedProject, scene, geometry: combined, properties: combined.properties,
+      object_type: scene.length === 1 ? scene[0].object_type : 'mine_layout' };
+    recordEdit(selectedProject);
+    setProjects(prev => prev.map(project => project.id === updated.id ? updated : project));
+    setSelectedProject(updated);
+    setGeometry(combined);
+    setSelectedObjectId(scene[0]?.id ?? null);
+    setLayers(layersForGeometry(combined));
   };
 
   const handleRenameProject = (project: ProjectFile, rawName: string) => {
@@ -614,6 +670,7 @@ export default function Home() {
     if (selectedProject?.id === project.id) {
       const next = remaining[0] || null;
       setSelectedProject(next);
+      setSelectedObjectId(sceneFromProject(next)[0]?.id ?? null);
       setGeometry(next?.geometry || null);
       setLayers(next?.geometry ? layersForGeometry(next.geometry) : []);
     }
@@ -630,7 +687,7 @@ export default function Home() {
       const data = JSON.parse(await file.text());
       const incoming = data.project || data;
       if (!isProjectFile(incoming)) throw new Error('This is not a MineCAD project file.');
-      const project = { ...incoming, id: crypto.randomUUID(), name: incoming.name.slice(0, 120), created_at: new Date().toISOString() };
+      const project = withScene({ ...incoming, id: crypto.randomUUID(), name: incoming.name.slice(0, 120), created_at: new Date().toISOString() });
       setProjects(prev => [project, ...prev]);
       handleSelectProject(project);
       setWorkspaceError('');
@@ -642,7 +699,7 @@ export default function Home() {
   const handleImportSurvey = async (file: File) => {
     try {
       if (file.size > 500_000) throw new Error('Survey CSV exceeds the 500 KB import limit.');
-      const project = importSurveyCsv(await file.text(), file.name);
+      const project = withScene(importSurveyCsv(await file.text(), file.name));
       setProjects(prev => [project, ...prev]);
       handleSelectProject(project);
       setWorkspaceError('');
@@ -659,7 +716,7 @@ export default function Home() {
     const seed = () => {
       const samples: Array<{ name: string; object_type: string; params: Record<string, unknown> }> = [
         { name: 'Demo: Open Pit Copper', object_type: 'open_pit',
-          params: { bench_height: 10, bench_width: 8, num_benches: 6, pit_length: 400, pit_width: 250, haul_road_width: 24, overall_slope: 50, batter_angle: 72 } },
+          params: { bench_height: 10, bench_width: 8, num_benches: 6, pit_length: 400, pit_width: 250, haul_road_width: 24, batter_angle: 72 } },
         { name: 'Demo: Room & Pillar Coal', object_type: 'room_and_pillar',
           params: { room_width: 6, pillar_width: 9, num_rooms_x: 6, num_rooms_y: 4, room_height: 3, entry_width: 5 } },
         { name: 'Demo: Longwall Panel', object_type: 'longwall_panel',
@@ -667,28 +724,30 @@ export default function Home() {
       ];
       const seeded: ProjectFile[] = samples.map((s, i) => {
         const geom = clientGeometry.generateGeometry(s.object_type, s.params);
-        return {
+        return withScene({
           id: `demo-${i}`,
           name: s.name,
           object_type: s.object_type,
           created_at: new Date().toISOString(),
           geometry: geom,
           properties: geom.properties,
-        };
+        });
       });
       const selected = seeded[0];
       setProjects(seeded);
       setSelectedProject(selected);
+      setSelectedObjectId(sceneFromProject(selected)[0]?.id ?? null);
       setGeometry(selected.geometry);
       setLayers(layersForGeometry(selected.geometry!));
     };
     loadWorkspace().then(saved => {
       if (cancelled) return;
-      const valid = saved?.projects?.filter(isProjectFile) || [];
+      const valid = (saved?.projects?.filter(isProjectFile) || []).map(withScene);
       if (saved && Array.isArray(saved.projects)) {
         const selected = valid.find(p => p.id === saved.selectedId) || valid[0] || null;
         setProjects(valid);
         setSelectedProject(selected);
+        setSelectedObjectId(sceneFromProject(selected)[0]?.id ?? null);
         setGeometry(selected?.geometry || null);
         setLayers(selected?.geometry ? layersForGeometry(selected.geometry) : []);
       } else seed();
@@ -780,13 +839,27 @@ export default function Home() {
 
         {/* Center Viewports + CLI / AI Box */}
         <div className="flex-1 flex flex-col overflow-y-auto md:overflow-hidden bg-bg-base min-w-0">
+          <PromptBox
+            onGenerate={handleGeneratePrompt}
+            isGenerating={isGenerating}
+            note={parseNote}
+            error={generationError}
+            method={generationMethod}
+            feedback={sceneFeedback}
+            componentCount={activeScene.length}
+          />
           {/* Canvas area */}
           <div className="relative shrink-0 h-[min(42dvh,320px)] md:h-auto md:flex-1 bg-bg-base border-b border-edge min-h-[180px] md:min-h-[280px]">
             {activeView === '2d' ? (
               <Canvas2D
                 geometry={geometry}
                 layers={layers}
-                fitKey={selectedProject ? `${selectedProject.id}:${selectedProject.object_type}` : null}
+                sceneObjects={activeScene}
+                selectedObjectId={selectedObject?.id ?? null}
+                onSelectObject={handleSelectSceneObject}
+                onMoveObject={handleMoveSceneObject}
+                onDeleteObject={handleDeleteSceneObject}
+                fitKey={selectedProject ? `${selectedProject.id}:${activeScene.length}` : null}
                 sheetMode={sheetMode}
                 sheetProjectName={selectedProject?.name ?? 'Untitled'}
                 sheetObjectType={selectedProject?.object_type ?? ''}
@@ -795,6 +868,8 @@ export default function Home() {
               <Viewport3D
                 geometry={geometry}
                 layers={layers}
+                selectedObjectId={selectedObject?.id ?? null}
+                onSelectObject={handleSelectSceneObject}
                 viewMode={viewMode3D}
                 showSectionView={showSectionView}
                 sectionHeight={sectionHeight}
@@ -802,27 +877,21 @@ export default function Home() {
             )}
           </div>
 
-          {/* Bottom Console CLI Terminal */}
-          <CommandLine
-            history={commandHistory}
-            onCommandSubmit={handleCommandLineSubmit}
-            activeProvider={aiConfig.provider}
-          />
-
-          {/* AI Prompter */}
-          <PromptBox
-            onGenerate={handleGeneratePrompt}
-            isGenerating={isGenerating}
-            note={parseNote}
-            error={generationError}
-            method={generationMethod}
-          />
+          <details className="shrink-0 border-t border-edge bg-surface-sunken">
+            <summary className="cursor-pointer px-3 py-1.5 text-[10px] font-mono text-fg-muted hover:text-fg">Command history and advanced CLI</summary>
+            <CommandLine history={commandHistory} onCommandSubmit={handleCommandLineSubmit} activeProvider={aiConfig.provider} />
+          </details>
         </div>
 
         {/* Right Properties Panel — in-flow 3-pane on md+, hidden on mobile */}
         <div className="hidden md:flex shrink-0 flex-col">
           <RightSidebar
-            geometry={geometry}
+            geometry={selectedObject?.geometry ?? geometry}
+            scene={activeScene}
+            selectedObjectId={selectedObject?.id ?? null}
+            onSelectSceneObject={handleSelectSceneObject}
+            onMoveSceneObject={handleMoveSceneObject}
+            onDeleteSceneObject={handleDeleteSceneObject}
             layers={layers}
             setLayers={setLayers}
             onUpdateParams={handleUpdateProperties}
@@ -841,7 +910,12 @@ export default function Home() {
             />
             <div role="dialog" aria-modal="true" aria-label="Properties and layers" className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] md:hidden">
               <RightSidebar
-                geometry={geometry}
+                geometry={selectedObject?.geometry ?? geometry}
+                scene={activeScene}
+                selectedObjectId={selectedObject?.id ?? null}
+                onSelectSceneObject={handleSelectSceneObject}
+                onMoveSceneObject={handleMoveSceneObject}
+                onDeleteSceneObject={handleDeleteSceneObject}
                 layers={layers}
                 setLayers={setLayers}
                 onUpdateParams={handleUpdateProperties}

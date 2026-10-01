@@ -1,11 +1,21 @@
 // MineCAD AI — Backend API Client
 
 import type { GenerateResponse, GeometryData } from '@/types';
+import type { ScenePlan } from '@/lib/scenePlanner';
 
 // Same-origin by default so requests go through the /api rewrite in next.config.ts
 // (NEXT_PUBLIC_BACKEND_URL is the rewrite target, read server-side).
 // Set NEXT_PUBLIC_API_URL to talk to a backend directly (must be in CSP connect-src).
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+
+export async function planSceneWithDeepSeek(prompt: string, apiKey: string, model: string): Promise<ScenePlan> {
+  const res = await fetch(`${API_BASE}/api/scene-plan`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(30000),
+    body: JSON.stringify({ prompt, provider: 'deepseek', api_key: apiKey, model }),
+  });
+  if (!res.ok) throw await parseErrorResponse(res);
+  return res.json();
+}
 
 async function parseErrorResponse(res: Response): Promise<Error> {
   try {

@@ -309,17 +309,34 @@ function heightfieldMeshes(
 
 export function generateOpenPit(params: Record<string, number>): GeometryData {
   const benchHeight = params.bench_height ?? 10;
-  const benchWidth = params.bench_width ?? 8;
+  const requestedBenchWidth = params.bench_width ?? 8;
   const numBenches = params.num_benches ?? 5;
   const pitLength = params.pit_length ?? 300;
   const pitWidth = params.pit_width ?? 200;
   const haulRoadWidth = params.haul_road_width ?? 22;
-  const overallSlope = params.overall_slope ?? 55;
+  const requestedSlope = params.overall_slope;
   const batterAngle = params.batter_angle ?? 75;
+  const slopeDrivesShape = (params as Record<string, unknown>)._design_driver === 'overall_slope'
+    || (requestedSlope != null && params.bench_width == null);
+  if (slopeDrivesShape && requestedSlope != null && requestedSlope >= batterAngle) {
+    throw new Error('Overall slope must be shallower than the batter angle.');
+  }
+  const faceSetback = benchHeight / Math.tan(batterAngle * Math.PI / 180);
+  const benchWidth = slopeDrivesShape && requestedSlope != null
+    ? benchHeight / Math.tan(requestedSlope * Math.PI / 180) - faceSetback
+    : requestedBenchWidth;
+  if (!Number.isFinite(benchWidth) || benchWidth < 0.1) throw new Error('Requested slope leaves no usable bench width.');
+  const overallSlope = Math.atan(benchHeight / (faceSetback + benchWidth)) * 180 / Math.PI;
+  const designWarnings: string[] = [];
+  if (requestedSlope != null && Math.abs(requestedSlope - overallSlope) > 0.5) {
+    designWarnings.push(`Requested ${requestedSlope}° overall slope conflicts with the bench geometry; shown slope is ${overallSlope.toFixed(1)}°.`);
+  }
+  if (slopeDrivesShape && params.bench_width != null && Math.abs(requestedBenchWidth - benchWidth) > 0.1) {
+    designWarnings.push(`Bench width was adjusted from ${requestedBenchWidth} m to ${benchWidth.toFixed(2)} m to achieve the requested slope.`);
+  }
 
   const prims: CadPrimitive[] = [];
   const meshes: MeshData[] = [];
-  const faceSetback = benchHeight / Math.tan(batterAngle * Math.PI / 180);
   const totalSetback = faceSetback + benchWidth;
 
   const layers = [
@@ -366,6 +383,7 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
   }
 
   const builtBenches = crestRects.length;
+  if (builtBenches !== numBenches) throw new Error('Pit footprint is too small for the requested number of benches. Increase length or width, or reduce bench count.');
 
   // Haul road (plan view)
   const roadPts: [number, number][] = [];
@@ -386,7 +404,8 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
     const rw = roadPts[0];
     const rw2 = roadPts2[0];
     prims.push(dimension(rw2[0], rw2[1] - 6, rw[0], rw[1] - 6, `HAUL ROAD ${haulRoadWidth} m`));
-    prims.push(text(rw[0] + 7, rw[1] + 5, 'GRADE ≈10%', 2, 'TEXT', 8));
+    prims.push(text(rw[0] + 7, rw[1] + 5, 'ILLUSTRATIVE RAMP — GRADE UNVERIFIED', 2, 'TEXT', 8));
+    designWarnings.push('Haul road ramp is illustrative; its grade, turning radius and connection are not validated.');
   }
 
   // ── 3D stepped pit shell ──
@@ -472,6 +491,7 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
     wasteVol += (benchHeight / 3) * (a1 + a2 + Math.sqrt(a1 * a2));
   }
   const wasteTonnes = wasteVol * 2.7; // waste rock ≈ 2.7 t/m³
+  designWarnings.push('Waste volume uses a simplified flat-ground pit model; tonnage assumes 2.7 t/m³, not a site block model.');
 
   return {
     primitives: prims,
@@ -486,6 +506,8 @@ export function generateOpenPit(params: Record<string, number>): GeometryData {
       pit_width: pitWidth,
       haul_road_width: haulRoadWidth,
       overall_slope: overallSlope,
+      design_warnings: designWarnings,
+      _design_driver: slopeDrivesShape ? 'overall_slope' : 'bench_width',
       batter_angle: batterAngle,
       total_depth: numBenches * benchHeight,
       waste_volume_m3: Math.round(wasteVol),
@@ -627,6 +649,8 @@ export function generateVentilation(params: Record<string, number>): GeometryDat
       name: 'Ventilation Network', num_airways: numAirways,
       airway_length: airwayLen, shaft_diameter: shaftD, fan_power_kw: fanPower,
       estimated_airflow_m3s: Math.round(5 * Math.PI * (shaftD / 2) ** 2),
+      assumed_air_velocity_mps: 5,
+      design_warnings: ['Airflow assumes 5 m/s through a shaft; pressure losses and fan duty are not calculated.'],
       _object_type: 'ventilation',
     },
     bounds: { minX: -30, minY: bottomY - 30, maxX: exX + 30, maxY: 80 },
@@ -652,7 +676,7 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
   const nx = dx / actualLen;
   const ny = dy / actualLen;
   const px = -ny; const py = nx;
-  const hw = width * 5;
+  const hw = width / 2;
 
   const layers = [
     { name: 'CONVEYOR', color: 5, description: 'Conveyor belt' },
@@ -694,10 +718,10 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
 
   // Belt: inclined box, carrying surface on top
   meshes.push(inclinedBoxMesh(startX, startY, 0, routeEndX, routeEndY, rise,
-    width * 10, 2, MINE_COLORS.conveyorBelt, 'conveyor_belt', 'CONVEYOR'));
+    width, 0.25, MINE_COLORS.conveyorBelt, 'conveyor_belt', 'CONVEYOR'));
   // Conveyor gallery rail along the belt edge (thin inclined strip)
   meshes.push(inclinedBoxMesh(startX, startY, 2, routeEndX, routeEndY, rise + 2,
-    0.8, 1.2, MINE_COLORS.trestleSteel, 'conveyor_rail', 'STRUCTURE'));
+    0.15, 0.4, MINE_COLORS.trestleSteel, 'conveyor_rail', 'STRUCTURE'));
 
   // Trestle supports marching along the route, ground → belt underside
   for (let i = 0; i <= numSupports; i++) {
@@ -705,11 +729,11 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
     const cx = startX + routeDx * t;
     const cy = startY + routeDy * t;
     const beltZ = rise * t;
-    const postW = Math.max(1.2, width * 3);
+    const postW = Math.max(0.4, width * 0.4);
     meshes.push(boxMesh(cx - postW / 2, cy - postW / 2, 0, postW, postW, Math.max(beltZ, 0.5),
       MINE_COLORS.trestleSteel, 'STRUCTURE'));
     // Bearing pad under the belt
-    const padW = width * 10;
+    const padW = width + 0.4;
     meshes.push(boxMesh(cx - padW / 2, cy - padW / 2, Math.max(beltZ - 0.5, 0), padW, padW, 0.5,
       MINE_COLORS.trestleSteel, 'STRUCTURE'));
   }
@@ -721,6 +745,7 @@ export function generateConveyor(params: Record<string, number>): GeometryData {
       start_x: startX, start_y: startY, end_x: endX, end_y: endY,
       start: [startX, startY], end: [endX, endY],
       vertical_lift_m: Math.round(rise * 100) / 100,
+      design_warnings: ['Conveyor routing, belt capacity, structural supports and operating incline are not verified.'],
       _object_type: 'conveyor',
     },
     bounds: { minX: Math.min(startX, endX) - 30, minY: Math.min(startY, endY) - 30,

@@ -76,6 +76,10 @@ export async function POST(request: Request) {
       interpretation = parsed.interpretation;
     }
     if (!OBJECT_TYPES.has(objectType)) return failure('Unknown design type.', 400);
+    if (objectType === 'open_pit') {
+      if (/\boverall\s+slope|\bslope\s+angle|\bsteeper|\bshallower/i.test(prompt)) params._design_driver = 'overall_slope';
+      else if (/\bbench\s+width/i.test(prompt)) params._design_driver = 'bench_width';
+    }
     const geometry = generateGeometry(objectType, params);
     geometry.properties._object_type = objectType;
     const response: GenerateResponse = {

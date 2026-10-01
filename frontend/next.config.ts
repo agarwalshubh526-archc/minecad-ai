@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
+import { fileURLToPath } from "node:url";
 
 const nextConfig: NextConfig = {
+  turbopack: { root: fileURLToPath(new URL('.', import.meta.url)) },
   // Security headers
   async headers() {
     // React needs eval() for debugging features in development only;

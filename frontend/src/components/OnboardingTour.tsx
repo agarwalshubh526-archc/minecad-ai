@@ -62,20 +62,20 @@ const STEPS = [
   {
     icon: I.pen,
     title: 'Describe your mine in plain English',
-    body: 'No AutoCAD needed. Type something like "open pit with 5 benches 10m high" — or pick a ready-made template from the left panel to start instantly.',
-    hint: 'Try the "Open Pit Mine" template if you just want to look around first.',
+    body: 'Describe one or more supported components, such as "create an open pit with 5 benches and a conveyor". Use "add" to extend the selected project.',
+    hint: 'Unsupported components are shown as an error before a partial layout is created.',
   },
   {
     icon: I.sliders,
-    title: 'Tune every number yourself',
-    body: 'Everything you typed becomes a slider-free, editable value in the right Properties panel. Hover (or tap) the info icon next to any parameter to learn what it means in real mining.',
-    hint: 'Change "bench height" and watch the 3D pit change shape.',
+    title: 'Select and adjust components',
+    body: 'Select a component in the drawing or Inspector. Drag it in 2D, change supported dimensions in Properties, or remove it. Undo restores the previous layout.',
+    hint: 'Change the overall pit slope and watch the bench geometry update.',
   },
   {
     icon: I.cube,
-    title: 'View in 2D/3D, export like AutoCAD',
-    body: 'Switch between plan-view 2D and an orbitable 3D model, measure distances on screen, and export your design as DXF (opens in AutoCAD), PDF, OBJ or STL.',
-    hint: 'Exported DXF files open directly in AutoCAD or LibreCAD.',
+    title: 'Inspect and export a conceptual layout',
+    body: 'Switch between 2D and 3D, measure in plan view, and export DXF, PDF, OBJ, or STL. Components placed together are not automatically connected or engineering-validated.',
+    hint: 'Review assumptions and warnings shown after generation.',
   },
 ];
 
