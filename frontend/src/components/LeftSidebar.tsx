@@ -202,7 +202,7 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
   }
 
   return (
-    <div className="w-full md:w-64 bg-surface-raised border-r border-edge flex flex-col overflow-hidden">
+    <div className="w-full h-full xl:w-64 bg-surface-raised border-r border-edge flex flex-col overflow-hidden">
       {/* Header */}
       <div className="h-10 flex items-center justify-between px-2 border-b border-edge">
         <div className="flex gap-0.5 bg-surface-sunken border border-edge rounded-md p-0.5">
@@ -249,7 +249,7 @@ export default function LeftSidebar({ projects, selectedProject, onSelectProject
                         </span>
                         <div className="min-w-0">
                           <div className="text-xs text-fg group-hover:text-accent transition-colors truncate">{t.name}</div>
-                          <div className="text-[9px] text-fg-faint truncate">{t.description}</div>
+                          <div className="text-[10px] text-fg-faint truncate">{t.description}</div>
                         </div>
                       </div>
                     </button>

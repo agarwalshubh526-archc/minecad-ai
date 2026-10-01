@@ -792,8 +792,8 @@ export default function Home() {
 
       {/* Main workspace layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar — in-flow 3-pane on md+, hidden on mobile (see drawer below) */}
-        <div className="hidden md:flex shrink-0 flex-col">
+        {/* Keep the drawing wide on laptops and tablets. */}
+        <div className="hidden xl:flex shrink-0 flex-col">
           <LeftSidebar
             projects={projects}
             selectedProject={selectedProject}
@@ -814,11 +814,11 @@ export default function Home() {
         {leftDrawerOpen && (
           <>
             <div
-              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              className="fixed inset-0 z-40 bg-black/60 xl:hidden"
               onClick={() => setLeftDrawerOpen(false)}
               aria-hidden
             />
-            <div role="dialog" aria-modal="true" aria-label="Projects and templates" className="fixed inset-y-0 left-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-r border-edge shadow-[var(--shadow-pop)] md:hidden">
+            <div role="dialog" aria-modal="true" aria-label="Projects and templates" className="fixed inset-y-0 left-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-r border-edge shadow-[var(--shadow-pop)] xl:hidden">
               <LeftSidebar
                 projects={projects}
                 selectedProject={selectedProject}
@@ -838,7 +838,19 @@ export default function Home() {
         )}
 
         {/* Center Viewports + CLI / AI Box */}
-        <div className="flex-1 flex flex-col overflow-y-auto md:overflow-hidden bg-bg-base min-w-0">
+        <main className="flex-1 flex flex-col overflow-y-auto lg:overflow-hidden bg-bg-base min-w-0">
+          <div className="shrink-0 h-10 flex items-center gap-2 px-3 lg:px-5 bg-surface-sunken border-b border-edge">
+            <button type="button" onClick={() => { setLeftDrawerOpen(true); setRightDrawerOpen(false); }} className="btn xl:hidden h-8 w-8 border border-edge" title="Open projects and templates" aria-label="Open projects and templates">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" /></svg>
+            </button>
+            <div className="min-w-0 flex-1 flex items-center gap-2 text-xs">
+              <span className="font-medium text-fg truncate">{selectedProject?.name ?? 'Untitled design'}</span>
+              <span className="text-fg-faint shrink-0">/</span>
+              <span className="text-fg-muted shrink-0">{activeView.toUpperCase()} viewport</span>
+            </div>
+            <span className="hidden sm:inline-flex rounded border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-medium text-warn">Concept design</span>
+            <button type="button" onClick={() => { setRightDrawerOpen(true); setLeftDrawerOpen(false); }} className="btn xl:hidden h-8 px-2.5 border border-edge text-[11px]" title="Open objects, properties and layers" aria-label="Open objects, properties and layers">Objects <span className="text-accent">{activeScene.length}</span></button>
+          </div>
           <PromptBox
             onGenerate={handleGeneratePrompt}
             isGenerating={isGenerating}
@@ -849,7 +861,7 @@ export default function Home() {
             componentCount={activeScene.length}
           />
           {/* Canvas area */}
-          <div className="relative shrink-0 h-[min(42dvh,320px)] md:h-auto md:flex-1 bg-bg-base border-b border-edge min-h-[180px] md:min-h-[280px]">
+          <div className="relative shrink-0 h-[min(46dvh,400px)] lg:h-auto lg:flex-1 bg-bg-base border-b border-edge min-h-[220px] lg:min-h-[280px]">
             {activeView === '2d' ? (
               <Canvas2D
                 geometry={geometry}
@@ -881,10 +893,10 @@ export default function Home() {
             <summary className="cursor-pointer px-3 py-1.5 text-[10px] font-mono text-fg-muted hover:text-fg">Command history and advanced CLI</summary>
             <CommandLine history={commandHistory} onCommandSubmit={handleCommandLineSubmit} activeProvider={aiConfig.provider} />
           </details>
-        </div>
+        </main>
 
-        {/* Right Properties Panel — in-flow 3-pane on md+, hidden on mobile */}
-        <div className="hidden md:flex shrink-0 flex-col">
+        {/* Right Properties Panel */}
+        <div className="hidden xl:flex shrink-0 flex-col">
           <RightSidebar
             geometry={selectedObject?.geometry ?? geometry}
             scene={activeScene}
@@ -904,11 +916,11 @@ export default function Home() {
         {rightDrawerOpen && (
           <>
             <div
-              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              className="fixed inset-0 z-40 bg-black/60 xl:hidden"
               onClick={() => setRightDrawerOpen(false)}
               aria-hidden
             />
-            <div role="dialog" aria-modal="true" aria-label="Properties and layers" className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] md:hidden">
+            <div role="dialog" aria-modal="true" aria-label="Properties and layers" className="fixed inset-y-0 right-0 z-[60] flex w-[85vw] max-w-80 flex-col bg-surface-raised border-l border-edge shadow-[var(--shadow-pop)] xl:hidden">
               <RightSidebar
                 geometry={selectedObject?.geometry ?? geometry}
                 scene={activeScene}
@@ -926,47 +938,6 @@ export default function Home() {
           </>
         )}
 
-        {/* Floating mobile drawer toggles */}
-        <button
-          onClick={() => {
-            if (!leftDrawerOpen) setLeftCollapsed(false);
-            setLeftDrawerOpen((v) => !v);
-          }}
-          className={`${leftDrawerOpen || rightDrawerOpen ? 'hidden' : 'flex'} md:hidden fixed top-14 left-3 z-50 h-11 w-11 items-center justify-center rounded-full bg-surface-overlay border border-edge-strong text-fg shadow-[var(--shadow-pop)] active:scale-95 transition-transform`}
-          title="Projects & templates"
-          aria-label={leftDrawerOpen ? 'Close projects panel' : 'Open projects and templates'}
-        >
-          {leftDrawerOpen ? (
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-              <path d="M3 3l10 10M13 3 3 13" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-              <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
-            </svg>
-          )}
-        </button>
-        <button
-          onClick={() => {
-            if (!rightDrawerOpen) setRightCollapsed(false);
-            setRightDrawerOpen((v) => !v);
-          }}
-          className={`${leftDrawerOpen || rightDrawerOpen ? 'hidden' : 'flex'} md:hidden fixed top-14 right-3 z-50 h-11 w-11 items-center justify-center rounded-full bg-surface-overlay border border-edge-strong text-fg shadow-[var(--shadow-pop)] active:scale-95 transition-transform`}
-          title="Properties & layers"
-          aria-label={rightDrawerOpen ? 'Close properties panel' : 'Open properties and layers'}
-        >
-          {rightDrawerOpen ? (
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-              <path d="M3 3l10 10M13 3 3 13" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-              <path d="M2.5 5h11M2.5 12h11" />
-              <circle cx="6" cy="5" r="1.8" />
-              <circle cx="10" cy="12" r="1.8" />
-            </svg>
-          )}
-        </button>
       </div>
       <LegalFooter />
       <OnboardingTour />

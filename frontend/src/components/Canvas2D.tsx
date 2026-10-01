@@ -672,9 +672,9 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden select-none">
       {/* Top Surveying Tool Bar Overlay */}
-      <div className="absolute top-3 left-3 right-14 bg-surface-overlay/90 backdrop-blur border border-edge rounded-lg p-1 flex items-center gap-1 z-30 shadow-[var(--shadow-pop)] font-mono text-[11px] overflow-x-auto scrollbar-none">
-        <button onClick={fitView} className="px-2.5 py-2 md:py-1 rounded text-fg-muted hover:bg-surface-hover border border-edge shrink-0" title="Fit all mine components in view">Fit all</button>
-        <button onClick={() => { setActiveTool('select'); setMeasurePoints([]); }} className={`px-2.5 py-2 md:py-1 rounded shrink-0 ${activeTool === 'select' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`} title="Select and drag a mine component">Select/Move</button>
+      <div className="absolute top-3 left-3 right-14 bg-surface-raised/95 backdrop-blur border border-edge-strong rounded-lg p-1 flex items-center gap-1 z-30 shadow-[var(--shadow-panel)] text-[11px] font-medium overflow-x-auto scrollbar-none">
+        <button onClick={fitView} className="px-2.5 py-2 md:py-1.5 rounded text-fg-muted hover:bg-surface-hover border border-edge shrink-0" title="Fit all mine components in view">Fit all</button>
+        <button onClick={() => { setActiveTool('select'); setMeasurePoints([]); }} className={`px-2.5 py-2 md:py-1.5 rounded shrink-0 ${activeTool === 'select' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`} title="Select and drag a mine component" aria-pressed={activeTool === 'select'}>Select</button>
         <button
           onClick={() => { setActiveTool('pan'); setMeasurePoints([]); }}
           className={`px-2.5 py-2 md:py-1 rounded flex items-center gap-1.5 transition-colors shrink-0 ${activeTool === 'pan' ? 'bg-accent-dim text-accent border border-edge-accent' : 'text-fg-muted hover:bg-surface-hover border border-transparent'}`}
@@ -683,7 +683,7 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
             <circle cx="7" cy="7" r="4" />
             <path d="m10 10 3.5 3.5" />
           </svg>
-          <span className="hidden sm:inline">Pan/Inspect</span>
+          <span className="hidden sm:inline">Pan</span>
         </button>
         <button
           onClick={() => { setActiveTool('coordinate'); setMeasurePoints([]); }}
@@ -693,7 +693,7 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
             <path d="M8 14.5s5-4.7 5-8.5a5 5 0 0 0-10 0c0 3.8 5 8.5 5 8.5Z" />
             <circle cx="8" cy="6" r="1.8" />
           </svg>
-          <span className="hidden sm:inline">XY Easting/Northing</span>
+          <span className="hidden sm:inline">Coordinate</span>
         </button>
         <button
           onClick={() => { setActiveTool('distance'); setMeasurePoints([]); }}
@@ -703,7 +703,7 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
             <rect x="1.5" y="5" width="13" height="6" rx="1" />
             <path d="M4.5 5v2.2M7.5 5v3M10.5 5v2.2" />
           </svg>
-          <span className="hidden sm:inline">Distance Tape</span>
+          <span className="hidden sm:inline">Distance</span>
         </button>
         <button
           onClick={() => { setActiveTool('area'); setMeasurePoints([]); }}
@@ -713,7 +713,7 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
             <path d="M2 3h12l-1.5 10h-9L2 3Z" />
             <path d="M8 3v10" strokeDasharray="2 1.5" />
           </svg>
-          <span className="hidden sm:inline">Polygon Area</span>
+          <span className="hidden sm:inline">Area</span>
         </button>
         {measurePoints.length > 0 && (
           <button
@@ -798,9 +798,9 @@ export default function Canvas2D({ geometry, layers, sceneObjects = [], selected
       </div>
 
       {/* Coordinate bar */}
-      <div className="absolute bottom-0 left-0 right-0 min-h-6 bg-surface-raised/90 backdrop-blur border-t border-edge flex flex-wrap items-center px-3 py-0.5 text-[9px] md:text-[10px] text-fg-muted font-mono gap-x-4 gap-y-0.5 z-30">
-        <span className="text-success tabular-nums whitespace-nowrap">Easting (X): {cursorWorld.x.toFixed(2)} m</span>
-        <span className="text-success tabular-nums whitespace-nowrap">Northing (Y): {cursorWorld.y.toFixed(2)} m</span>
+      <div className="absolute bottom-0 left-0 right-0 min-h-7 bg-surface-raised/95 backdrop-blur border-t border-edge flex flex-wrap items-center px-3 py-1 text-[10px] text-fg-muted font-mono gap-x-4 gap-y-0.5 z-30">
+        <span className="text-fg tabular-nums whitespace-nowrap">Easting (X): {cursorWorld.x.toFixed(2)} m</span>
+        <span className="text-fg tabular-nums whitespace-nowrap">Northing (Y): {cursorWorld.y.toFixed(2)} m</span>
         <span className="whitespace-nowrap">Tool: {activeTool.toUpperCase()}</span>
         <span className="whitespace-nowrap">Zoom: {(transform.scale * 100).toFixed(0)}%</span>
         {geometry && <span className="text-info whitespace-nowrap">{geometry.primitives.length} CAD primitives</span>}

@@ -78,15 +78,16 @@ export default function Toolbar({
   }, []);
 
   return (
-    <div className="h-12 bg-surface-raised/90 backdrop-blur border-b border-edge flex items-center px-3 gap-1.5 select-none relative z-50 overflow-x-auto">
+    <header className="h-12 bg-surface-raised border-b border-edge flex items-center px-2 md:px-3 gap-2 select-none relative z-50">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/* Logo */}
       <div className="flex items-center gap-2.5 mr-3 pr-4 border-r border-edge shrink-0">
-        <div className="w-7 h-7 rounded-[8px] bg-accent flex items-center justify-center text-[#1c1305] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_8px_rgba(247,184,78,0.35)]">
+        <div className="w-7 h-7 rounded-[7px] bg-accent flex items-center justify-center text-[#1c1305]">
           {I.cube}
         </div>
         <div className="hidden sm:block leading-none">
           <div className="text-[13px] font-bold text-fg tracking-tight">MineCAD AI</div>
-          <div className="text-[9px] font-semibold text-fg-faint tracking-[0.16em] uppercase mt-0.5">Mining CAD Studio</div>
+          <div className="text-[9px] font-medium text-fg-muted tracking-[0.08em] uppercase mt-0.5">Design workspace</div>
         </div>
       </div>
 
@@ -172,11 +173,11 @@ export default function Toolbar({
         <button type="button" className="btn h-8 px-2 text-[11px]" onClick={onRedo} disabled={!canRedo} title="Redo design edit" aria-label="Redo design edit">Redo</button>
       </div>
 
-      <div className="flex-1" />
+      </div>
 
       {/* Status */}
       {isGenerating && (
-        <div className="flex items-center gap-2 mr-3 animate-fade-in">
+        <div className="hidden sm:flex items-center gap-2 animate-fade-in shrink-0">
           <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
           <span className="text-[10px] text-accent font-mono tracking-wide">GENERATING</span>
         </div>
@@ -184,21 +185,22 @@ export default function Toolbar({
 
       {/* Export group */}
       {geometry && (
-        <div className="flex items-center gap-1 mr-2 pr-2 border-r border-edge shrink-0">
-          <span className="eyebrow mr-1.5 hidden lg:inline">Export</span>
+        <details className="relative shrink-0">
+          <summary className="btn h-8 px-3 text-[11px] font-semibold border border-edge-strong list-none [&::-webkit-details-marker]:hidden">Export <span aria-hidden="true">⌄</span></summary>
+          <div className="absolute right-0 top-full mt-2 w-40 rounded-lg border border-edge-strong bg-surface-overlay p-1.5 shadow-[var(--shadow-pop)]">
           {['DXF', 'SVG', 'PDF', 'OBJ', 'STL'].map(fmt => (
             <button
               key={fmt}
-              onClick={() => onExport(fmt.toLowerCase())}
+              onClick={(event) => { onExport(fmt.toLowerCase()); event.currentTarget.closest('details')?.removeAttribute('open'); }}
               title={`Export ${fmt}`}
-              className="btn h-7 px-2 text-[10px] font-mono"
+              className="btn w-full h-8 justify-start px-2.5 text-xs"
             >
-              {fmt}
+              {fmt} file
             </button>
           ))}
           {Array.isArray(geometry.properties?.survey_stations) && (
             <button
-              onClick={() => {
+              onClick={(event) => {
                 const stations = geometry.properties.survey_stations as Array<{ station: string; easting: number; northing: number; elevation: number; code?: string }>;
                 const csvRows = ['Station,Easting,Northing,Elevation,Code'];
                 for (const s of stations) {
@@ -213,14 +215,16 @@ export default function Toolbar({
                 a.click();
                 document.body.removeChild(a);
                 setTimeout(() => URL.revokeObjectURL(url), 0);
+                event.currentTarget.closest('details')?.removeAttribute('open');
               }}
-              className="btn h-7 px-2 text-[10px] font-mono text-success border-success/30 hover:border-success/50 hover:text-success"
+              className="btn w-full h-8 justify-start px-2.5 text-xs text-success hover:text-success"
               title="Download Survey Stations CSV"
             >
-              CSV<span className="hidden md:inline">&nbsp;Data</span>
+              CSV data
             </button>
           )}
-        </div>
+          </div>
+        </details>
       )}
 
       {/* AI Config */}
@@ -285,6 +289,6 @@ export default function Toolbar({
           )}
         </div>
       )}
-    </div>
+    </header>
   );
 }

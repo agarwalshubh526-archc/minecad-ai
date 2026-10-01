@@ -361,7 +361,7 @@ export default function RightSidebar({
   ];
 
   return (
-    <div className="w-full md:w-64 bg-surface-raised border-l border-edge flex flex-col overflow-hidden select-none">
+    <div className="w-full h-full xl:w-64 bg-surface-raised border-l border-edge flex flex-col overflow-hidden select-none">
       {/* Header */}
       <div className="h-10 flex items-center justify-between px-3 border-b border-edge">
         <span className="eyebrow">Inspector</span>

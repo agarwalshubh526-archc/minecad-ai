@@ -23,8 +23,8 @@
 
   /* cool-gray text ramp */
   --fg: #e9eef6;
-  --fg-muted: #98a5b9;
-  --fg-faint: #5d6a80;
+  --fg-muted: #a8b5c7;
+  --fg-faint: #8190a7;
 
   /* signature amber accent (primary/active/selection ONLY) */
   --accent: #f7b84e;
@@ -191,7 +191,7 @@ body {
 
 /* Uppercase micro-label (PROPERTIES, LAYERS, section headers) */
 .eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--fg-faint);
